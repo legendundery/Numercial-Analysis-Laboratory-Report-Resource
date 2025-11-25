@@ -387,7 +387,7 @@ void UI::loopExperiment()
         attron(COLOR_PAIR(3));
         mvprintw(0, 16, "[焦点: %s]", focusNames[focus]);
         attroff(COLOR_PAIR(3));
-        int listW = showTree_ ? std::max(28, w / 4) : 12;
+        int listW = showTree_ ? std::max(40, w / 3) : 12;
         std::string toggle = showTree_ ? "[ 实验列表 ◂ ]" : "[ 实验列表 ▸ ]";
         int toggleX = w - (int)toggle.size() - 2;
         mvprintw(0, toggleX, "%s", toggle.c_str());
@@ -723,7 +723,7 @@ void UI::loopExperiment()
                 else if (isCurrentExp)
                     attron(COLOR_PAIR(2) | A_BOLD);
                 std::string text = std::string(indent, ' ') + marker + node->title;
-                int maxWidth = listW - 3;
+                int maxWidth = listW - 4;
                 if ((int)text.size() > maxWidth)
                     text.resize(maxWidth);
                 mvprintw(listY + 1 + i, listX, "%s", text.c_str());
