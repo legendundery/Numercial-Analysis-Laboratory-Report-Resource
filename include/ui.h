@@ -130,6 +130,14 @@ public:
     using AddPresetCallback = std::function<void()>;
     void onAddPreset(AddPresetCallback cb);
 
+    // 矩阵输入回调（当焦点在说明区按 'm' 时触发）
+    using MatrixInputCallback = std::function<void()>;
+    void onMatrixInput(MatrixInputCallback cb);
+
+    // 矩阵预设切换回调（当焦点在说明区，用户按左右键切换矩阵预设时触发）
+    using MatrixPresetCallback = std::function<void(int delta)>;
+    void onMatrixPresetChange(MatrixPresetCallback cb);
+
     // 静态单例指针（便于在其他模块中通过 UI::instance() 访问输出 API）
     static UI *instance();
 
@@ -194,6 +202,12 @@ private:
 
     // 添加预设回调
     AddPresetCallback addPresetCallback_;
+
+    // 矩阵输入回调
+    MatrixInputCallback matrixInputCallback_;
+
+    // 矩阵预设切换回调
+    MatrixPresetCallback matrixPresetCallback_;
 
     // 单例
     static UI *self_;

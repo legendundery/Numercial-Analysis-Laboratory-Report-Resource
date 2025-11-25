@@ -96,6 +96,10 @@ void UI::onPresetChange(PresetChangeCallback cb) { presetCallback_ = cb; }
 
 void UI::onAddPreset(AddPresetCallback cb) { addPresetCallback_ = cb; }
 
+void UI::onMatrixInput(MatrixInputCallback cb) { matrixInputCallback_ = cb; }
+
+void UI::onMatrixPresetChange(MatrixPresetCallback cb) { matrixPresetCallback_ = cb; }
+
 std::string UI::getCurrentExperiment() const { return currentExperiment_; }
 
 void UI::addInputField(const std::string &label, const std::string &defaultValue, const std::string &placeholder)
@@ -364,8 +368,6 @@ static void flattenTree(const std::vector<ExperimentNode> &nodes, std::vector<st
     }
 }
 
-// 在本实现里，为简化，展开/折叠通过点击标题区域或按空格键实现；
-// 进入实验通过回车或点击实验项文本区域实现。
 void UI::loopExperiment()
 {
     bool descCollapsed = false, inputCollapsed = false, outputCollapsed = false;
@@ -962,6 +964,11 @@ void UI::loopExperiment()
                 if (addPresetCallback_)
                     addPresetCallback_();
             }
+            else if (ch == 'm' || ch == 'M')
+            {
+                if (matrixInputCallback_)
+                    matrixInputCallback_();
+            }
         }
         else if (focus == 1)
         {
@@ -999,6 +1006,12 @@ void UI::loopExperiment()
                 {
                     inputBuffer_.pop_back();
                 }
+            }
+            else if (ch == 'm' || ch == 'M')
+            {
+                // 在输入区按'm'修改矩阵
+                if (matrixInputCallback_)
+                    matrixInputCallback_();
             }
             else if (ch == '\n' || ch == '\r')
             {

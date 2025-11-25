@@ -41,6 +41,11 @@ private:
         std::string description;        // 说明文案
         ResultSnapshot last;            // 最近结果
         int presetIndex = 0;            // 预设函数索引
+
+        // 线性方程组相关
+        calc::Matrix matrixA;        // 系数矩阵
+        std::vector<double> vectorB; // 右端向量
+        int matrixPresetIndex = 0;   // 矩阵预设索引
     };
 
     // 内部工具
@@ -51,8 +56,24 @@ private:
     void computeScan(const std::string &name);
     void computeBisection(const std::string &name);
     void computeNewton(const std::string &name);
+    void computeAitken(const std::string &name);
+    void computeNewtonDownhill(const std::string &name);
+    void computeSecantSinglePoint(const std::string &name);
+    void computeSecantDoublePoint(const std::string &name);
+    void computeGaussElimination(const std::string &name);
+    void computeCroutElimination(const std::string &name);
+    void computeCholesky(const std::string &name);
+    void computeThomas(const std::string &name);
+    void computeColumnPivoting(const std::string &name);
+    void computeFullPivoting(const std::string &name);
     void ensurePresets();
     void cyclePresetFor(const std::string &name, int delta);
+
+    // 矩阵相关
+    void ensureMatrixPresets();
+    void showMatrixInputDialog(const std::string &expName, bool createNew);
+    void cycleMatrixPresetFor(const std::string &name, int delta);
+    void addMatrixPreset();
 
     // 解析与格式化
     static double toDouble(const std::string &s, double defv);
@@ -70,6 +91,15 @@ private:
         bool hasDf = true;
     };
     std::vector<Preset> presets_;
+
+    // 矩阵预设
+    struct MatrixPreset
+    {
+        std::string name;
+        calc::Matrix A;
+        std::vector<double> b;
+    };
+    std::vector<MatrixPreset> matrixPresets_;
 };
 
 #endif // MANAGER_H
