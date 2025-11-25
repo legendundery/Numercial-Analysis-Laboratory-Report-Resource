@@ -30,6 +30,7 @@ namespace calc
                                   double x0,
                                   int maxIter,
                                   double tol);
+    // 其余方法复用即可
 
     // ==================== 矩阵计算 ====================
 
@@ -98,6 +99,64 @@ namespace calc
 
     // 全主元素法：每次选取全部剩余元素中绝对值最大的交换到主元位置
     GaussResult fullPivoting(const Matrix &A, const std::vector<double> &b);
+
+    // ==================== 矩阵工具函数 ====================
+
+    // 矩阵范数
+    double matrixNorm1(const Matrix &A);   // 1-范数（列和范数）
+    double matrixNorm2(const Matrix &A);   // 2-范数（谱范数）
+    double matrixNormInf(const Matrix &A); // ∞-范数（行和范数）
+    double matrixNormF(const Matrix &A);   // F-范数（Frobenius范数）
+
+    // 向量范数
+    double vectorNorm2(const std::vector<double> &v);   // 2-范数
+    double vectorNormInf(const std::vector<double> &v); // ∞-范数
+
+    // 矩阵运算
+    Matrix matrixMultiply(const Matrix &A, const Matrix &B);                                 // 矩阵乘法
+    std::vector<double> matrixVectorMultiply(const Matrix &A, const std::vector<double> &x); // 矩阵向量乘法
+    Matrix matrixAdd(const Matrix &A, const Matrix &B);                                      // 矩阵加法
+    Matrix matrixSubtract(const Matrix &A, const Matrix &B);                                 // 矩阵减法
+    Matrix matrixScale(const Matrix &A, double scalar);                                      // 矩阵数乘
+
+    // 谱半径（最大特征值的绝对值）
+    double spectralRadius(const Matrix &A, int maxIter = 100, double tol = 1e-6);
+
+    // 检查矩阵是否严格对角占优
+    bool isStrictlyDiagonallyDominant(const Matrix &A);
+
+    // 计算雅可比迭代矩阵的谱半径（用于判断收敛性）
+    double jacobiSpectralRadius(const Matrix &A);
+
+    // 计算SOR方法的最优松弛因子（针对对角占优矩阵）
+    double optimalOmegaSOR(const Matrix &A);
+
+    // ==================== 迭代法求解线性方程组 ====================
+
+    // 迭代法结果
+    struct IterativeResult
+    {
+        bool success = false;                        // 是否收敛
+        std::vector<double> solution;                // 解向量
+        std::string errorMsg;                        // 错误信息
+        std::vector<std::vector<double>> iterations; // 迭代过程（每行是一次迭代的解向量）
+        std::vector<double> errors;                  // 每次迭代的误差
+        Matrix iterationMatrix;                      // 迭代矩阵
+        double spectralRadius;                       // 迭代矩阵的谱半径
+        std::vector<std::string> stepDesc;           // 步骤描述
+    };
+
+    // 雅可比迭代法
+    IterativeResult jacobiIteration(const Matrix &A, const std::vector<double> &b,
+                                    const std::vector<double> &x0, int maxIter, double tol);
+
+    // 高斯-赛德尔迭代法
+    IterativeResult gaussSeidelIteration(const Matrix &A, const std::vector<double> &b,
+                                         const std::vector<double> &x0, int maxIter, double tol);
+
+    // 松弛迭代法（SOR）
+    IterativeResult sorIteration(const Matrix &A, const std::vector<double> &b,
+                                 const std::vector<double> &x0, int maxIter, double tol, double omega);
 }
 
 #endif // CALC_H

@@ -50,7 +50,10 @@ void Manager::bindUiCallbacks()
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
             name.find("列主元素法") != std::string::npos ||
-            name.find("全主元素法") != std::string::npos)
+            name.find("全主元素法") != std::string::npos ||
+            name.find("雅可比") != std::string::npos ||
+            name.find("高斯-赛德尔") != std::string::npos ||
+            name.find("松弛") != std::string::npos)
         {
             cycleMatrixPresetFor(name, delta);
         }
@@ -70,7 +73,10 @@ void Manager::bindUiCallbacks()
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
             name.find("列主元素法") != std::string::npos ||
-            name.find("全主元素法") != std::string::npos)
+            name.find("全主元素法") != std::string::npos ||
+            name.find("雅可比") != std::string::npos ||
+            name.find("高斯-赛德尔") != std::string::npos ||
+            name.find("松弛") != std::string::npos)
         {
             addMatrixPreset();
         }
@@ -89,7 +95,10 @@ void Manager::bindUiCallbacks()
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
             name.find("列主元素法") != std::string::npos ||
-            name.find("全主元素法") != std::string::npos)
+            name.find("全主元素法") != std::string::npos ||
+            name.find("雅可比") != std::string::npos ||
+            name.find("高斯-赛德尔") != std::string::npos ||
+            name.find("松弛") != std::string::npos)
             showMatrixInputDialog(name, false); });
 
     ui_.onMatrixPresetChange([this](int delta)
@@ -148,6 +157,9 @@ void Manager::useExperiment(const std::string &name)
             ui_.output().addTableTab("迭代表", snap.table);
         if (!snap.plot.xs.empty())
             ui_.output().addPlotTab("曲线", snap.plot);
+        // 恢复额外的表格标签页
+        for (const auto &extra : snap.extraTables)
+            ui_.output().addTableTab(extra.first, extra.second);
     }
     else
     {
@@ -225,6 +237,21 @@ void Manager::computeExperiment(const std::string &name)
     if (name.find("全主元素法") != string::npos)
     {
         computeFullPivoting(name);
+        return;
+    }
+    if (name.find("雅可比") != string::npos)
+    {
+        computeJacobi(name);
+        return;
+    }
+    if (name.find("高斯-赛德尔") != string::npos)
+    {
+        computeGaussSeidel(name);
+        return;
+    }
+    if (name.find("松弛") != string::npos)
+    {
+        computeSOR(name);
         return;
     }
     // 其他实验暂未实现
@@ -314,6 +341,25 @@ void Manager::ensureDefaultsFor(const std::string &name)
     else if (name.find("全主元素法") != string::npos)
     {
         st.fields.push_back({"点击说明区 [m] 键输入矩阵", "", "或使用预设 ([<][>] 切换)", 50});
+    }
+    else if (name.find("雅可比") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键输入矩阵 A 和向量 b", "", "", 50});
+        st.fields.push_back({"精度 tol:", "1e-6", "如 1e-6", 20});
+        st.fields.push_back({"最大迭代次数:", "100", "整数", 10});
+    }
+    else if (name.find("高斯-赛德尔") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键输入矩阵 A 和向量 b", "", "", 50});
+        st.fields.push_back({"精度 tol:", "1e-6", "如 1e-6", 20});
+        st.fields.push_back({"最大迭代次数:", "100", "整数", 10});
+    }
+    else if (name.find("松弛") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键输入矩阵 A 和向量 b", "", "", 50});
+        st.fields.push_back({"精度 tol:", "1e-6", "如 1e-6", 20});
+        st.fields.push_back({"最大迭代次数:", "100", "整数", 10});
+        st.fields.push_back({"松弛因子 ω:", "1.2", "(0,2) 内实数", 20});
     }
     else
     {
@@ -518,6 +564,51 @@ void Manager::fillDescriptionFor(const std::string &name)
             }
         }
         oss << "- 提示：按 [<] [>] 切换预设；按 [a] 创建新预设矩阵；按 [m] 编辑当前预设矩阵\n";
+    }
+    else if (name.find("雅可比") != string::npos)
+    {
+        ensureMatrixPresets();
+        oss << "雅可比迭代法：\n";
+        oss << "- 迭代公式：x(k+1) = D^(-1)(b - (L+U)x(k))\n";
+        oss << "- D 为对角矩阵，L 为严格下三角，U 为严格上三角\n";
+        oss << "- 迭代矩阵：B_J = -D^(-1)(L+U)\n";
+        oss << "- 收敛条件：谱半径 ρ(B_J) < 1\n";
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[states_[name].matrixPresetIndex % matrixPresets_.size()];
+            oss << "- 当前预设：" << preset.name << "\n";
+        }
+        oss << "- 提示：按 [m] 编辑矩阵；设置精度和最大迭代次数\n";
+    }
+    else if (name.find("高斯-赛德尔") != string::npos)
+    {
+        ensureMatrixPresets();
+        oss << "高斯-赛德尔迭代法：\n";
+        oss << "- 迭代公式：x(k+1) = (D+L)^(-1)(b - Ux(k))\n";
+        oss << "- 使用最新值立即参与后续计算\n";
+        oss << "- 迭代矩阵：B_GS = -(D+L)^(-1)U\n";
+        oss << "- 收敛条件：谱半径 ρ(B_GS) < 1\n";
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[states_[name].matrixPresetIndex % matrixPresets_.size()];
+            oss << "- 当前预设：" << preset.name << "\n";
+        }
+        oss << "- 提示：按 [m] 编辑矩阵；设置精度和最大迭代次数\n";
+    }
+    else if (name.find("松弛") != string::npos)
+    {
+        ensureMatrixPresets();
+        oss << "松弛迭代法（SOR）：\n";
+        oss << "- 迭代公式：x(k+1) = (D+ωL)^(-1)[ωb - (ωU + (ω-1)D)x(k)]\n";
+        oss << "- 松弛因子 ω ∈ (0, 2)，ω=1 时退化为 Gauss-Seidel\n";
+        oss << "- 最优松弛因子可加速收敛\n";
+        oss << "- 收敛条件：谱半径 ρ(B_ω) < 1\n";
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[states_[name].matrixPresetIndex % matrixPresets_.size()];
+            oss << "- 当前预设：" << preset.name << "\n";
+        }
+        oss << "- 提示：按 [m] 编辑矩阵；设置精度、最大迭代次数和松弛因子\n";
     }
     else
     {
@@ -1666,7 +1757,39 @@ void Manager::ensureMatrixPresets()
     if (!matrixPresets_.empty())
         return;
 
-    // 通用预设1（3x3）
+    // 严格对角占优预设1（迭代法必收敛）
+    {
+        calc::Matrix A(3, 3);
+        A(0, 0) = 5;
+        A(0, 1) = 2;
+        A(0, 2) = 1;
+        A(1, 0) = -1;
+        A(1, 1) = 4;
+        A(1, 2) = 2;
+        A(2, 0) = 2;
+        A(2, 1) = -3;
+        A(2, 2) = 10;
+        std::vector<double> b = {-12, 20, 3};
+        matrixPresets_.push_back({"严格对角占优1 (3x3)", A, b});
+    }
+
+    // 对角占优预设2（适合SOR测试）
+    {
+        calc::Matrix A(3, 3);
+        A(0, 0) = 4;
+        A(0, 1) = -1;
+        A(0, 2) = 0;
+        A(1, 0) = -1;
+        A(1, 1) = 4;
+        A(1, 2) = -1;
+        A(2, 0) = 0;
+        A(2, 1) = -1;
+        A(2, 2) = 4;
+        std::vector<double> b = {1, 4, -3};
+        matrixPresets_.push_back({"严格对角占优2 (3x3)", A, b});
+    }
+
+    // 通用预设1（3x3）- 不保证迭代收敛
     {
         calc::Matrix A(3, 3);
         A(0, 0) = 1;
@@ -2380,6 +2503,343 @@ void Manager::computeColumnPivoting(const std::string &name)
         }
         ui_.output().addTableTab("U矩阵", tbl3);
     }
+}
+
+void Manager::computeJacobi(const std::string &name)
+{
+    auto &st = states_[name];
+    ensureMatrixPresets();
+
+    if (st.matrixA.rows() == 0)
+    {
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
+            st.matrixA = preset.A;
+            st.vectorB = preset.b;
+        }
+        else
+        {
+            st.last.summary = "请先输入或选择矩阵。";
+            st.last.has = true;
+            return;
+        }
+    }
+
+    double tol = toDouble(ui_.getInputValue(1), 1e-6);
+    int maxIter = toInt(ui_.getInputValue(2), 100);
+
+    // 收敛性判断
+    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
+    double rhoJ = calc::jacobiSpectralRadius(st.matrixA);
+
+    int n = st.matrixA.rows();
+    std::vector<double> x0(n, 0.0);
+    auto result = calc::jacobiIteration(st.matrixA, st.vectorB, x0, maxIter, tol);
+
+    std::ostringstream oss;
+    oss << "方法：雅可比迭代法\n";
+    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
+    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n\n";
+
+    oss << "收敛性分析：\n";
+    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
+    oss << "  迭代矩阵谱半径 ρ(B_J) = " << fmt(rhoJ, 8);
+    if (rhoJ < 1.0)
+        oss << " < 1（充要条件满足，必收敛）\n";
+    else
+        oss << " ≥ 1（不满足收敛条件）\n";
+    oss << "\n";
+
+    if (result.success)
+    {
+        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
+        oss << "解向量：\n";
+        for (int i = 0; i < (int)result.solution.size(); ++i)
+            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+    }
+    else
+    {
+        oss << "求解失败：" << result.errorMsg << "\n";
+        if (!result.solution.empty())
+        {
+            oss << "当前近似解：\n";
+            for (int i = 0; i < (int)result.solution.size(); ++i)
+                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+        }
+    }
+
+    // 迭代表
+    UiOutputPane::TableData tbl;
+    tbl.headers.push_back("k");
+    for (int i = 0; i < n; ++i)
+        tbl.headers.push_back("x" + std::to_string(i + 1));
+    tbl.headers.push_back("误差");
+
+    for (size_t k = 0; k < result.iterations.size(); ++k)
+    {
+        std::vector<std::string> row;
+        row.push_back(std::to_string(k));
+        for (int i = 0; i < n; ++i)
+            row.push_back(fmt(result.iterations[k][i], 8));
+        if (k > 0 && k - 1 < result.errors.size())
+            row.push_back(fmt(result.errors[k - 1], 8));
+        else
+            row.push_back("-");
+        tbl.rows.push_back(row);
+    }
+
+    st.last.summary = oss.str();
+    st.last.table = std::move(tbl);
+    st.last.plot = {};
+    st.last.extraTables.clear();
+
+    // 迭代矩阵
+    UiOutputPane::TableData tbl2;
+    tbl2.headers.push_back("");
+    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+        tbl2.headers.push_back("x" + std::to_string(j + 1));
+    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
+    {
+        std::vector<std::string> row;
+        row.push_back("[" + std::to_string(i + 1) + "]");
+        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+            row.push_back(fmt(result.iterationMatrix(i, j), 6));
+        tbl2.rows.push_back(row);
+    }
+    st.last.extraTables.push_back({"B_J矩阵", tbl2});
+    st.last.has = true;
+
+    ui_.output().clear();
+    ui_.output().addTextTab("摘要", st.last.summary);
+    ui_.output().addTableTab("迭代过程", st.last.table);
+    ui_.output().addTableTab("B_J矩阵", tbl2);
+}
+
+void Manager::computeGaussSeidel(const std::string &name)
+{
+    auto &st = states_[name];
+    ensureMatrixPresets();
+
+    if (st.matrixA.rows() == 0)
+    {
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
+            st.matrixA = preset.A;
+            st.vectorB = preset.b;
+        }
+        else
+        {
+            st.last.summary = "请先输入或选择矩阵。";
+            st.last.has = true;
+            return;
+        }
+    }
+
+    double tol = toDouble(ui_.getInputValue(1), 1e-6);
+    int maxIter = toInt(ui_.getInputValue(2), 100);
+
+    // 收敛性判断
+    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
+
+    int n = st.matrixA.rows();
+    std::vector<double> x0(n, 0.0);
+    auto result = calc::gaussSeidelIteration(st.matrixA, st.vectorB, x0, maxIter, tol);
+
+    std::ostringstream oss;
+    oss << "方法：高斯-赛德尔迭代法\n";
+    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
+    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n\n";
+
+    oss << "收敛性分析：\n";
+    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
+    oss << "  迭代矩阵谱半径 ρ(B_GS) = " << fmt(result.spectralRadius, 8);
+    if (result.spectralRadius < 1.0)
+        oss << " < 1（充要条件满足，必收敛）\n";
+    else
+        oss << " ≥ 1（不满足收敛条件）\n";
+    oss << "\n";
+
+    if (result.success)
+    {
+        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
+        oss << "解向量：\n";
+        for (int i = 0; i < (int)result.solution.size(); ++i)
+            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+    }
+    else
+    {
+        oss << "求解失败：" << result.errorMsg << "\n";
+        if (!result.solution.empty())
+        {
+            oss << "当前近似解：\n";
+            for (int i = 0; i < (int)result.solution.size(); ++i)
+                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+        }
+    }
+
+    UiOutputPane::TableData tbl;
+    tbl.headers.push_back("k");
+    for (int i = 0; i < n; ++i)
+        tbl.headers.push_back("x" + std::to_string(i + 1));
+    tbl.headers.push_back("误差");
+
+    for (size_t k = 0; k < result.iterations.size(); ++k)
+    {
+        std::vector<std::string> row;
+        row.push_back(std::to_string(k));
+        for (int i = 0; i < n; ++i)
+            row.push_back(fmt(result.iterations[k][i], 8));
+        if (k > 0 && k - 1 < result.errors.size())
+            row.push_back(fmt(result.errors[k - 1], 8));
+        else
+            row.push_back("-");
+        tbl.rows.push_back(row);
+    }
+
+    st.last.summary = oss.str();
+    st.last.table = std::move(tbl);
+    st.last.plot = {};
+    st.last.extraTables.clear();
+
+    // 迭代矩阵
+    UiOutputPane::TableData tbl2;
+    tbl2.headers.push_back("");
+    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+        tbl2.headers.push_back("x" + std::to_string(j + 1));
+    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
+    {
+        std::vector<std::string> row;
+        row.push_back("[" + std::to_string(i + 1) + "]");
+        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+            row.push_back(fmt(result.iterationMatrix(i, j), 6));
+        tbl2.rows.push_back(row);
+    }
+    st.last.extraTables.push_back({"B_GS矩阵", tbl2});
+    st.last.has = true;
+
+    ui_.output().clear();
+    ui_.output().addTextTab("摘要", st.last.summary);
+    ui_.output().addTableTab("迭代过程", st.last.table);
+    ui_.output().addTableTab("B_GS矩阵", tbl2);
+}
+
+void Manager::computeSOR(const std::string &name)
+{
+    auto &st = states_[name];
+    ensureMatrixPresets();
+
+    if (st.matrixA.rows() == 0)
+    {
+        if (!matrixPresets_.empty())
+        {
+            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
+            st.matrixA = preset.A;
+            st.vectorB = preset.b;
+        }
+        else
+        {
+            st.last.summary = "请先输入或选择矩阵。";
+            st.last.has = true;
+            return;
+        }
+    }
+
+    double tol = toDouble(ui_.getInputValue(1), 1e-6);
+    int maxIter = toInt(ui_.getInputValue(2), 100);
+    double omega = toDouble(ui_.getInputValue(3), 1.2);
+
+    // 收敛性判断和最优松弛因子计算
+    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
+    double omegaOpt = calc::optimalOmegaSOR(st.matrixA);
+
+    int n = st.matrixA.rows();
+    std::vector<double> x0(n, 0.0);
+    auto result = calc::sorIteration(st.matrixA, st.vectorB, x0, maxIter, tol, omega);
+
+    std::ostringstream oss;
+    oss << "方法：松弛迭代法（SOR）\n";
+    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
+    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n";
+    oss << "松弛因子 ω = " << fmt(omega, 4) << "\n\n";
+
+    oss << "收敛性分析：\n";
+    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
+    oss << "  最优松弛因子 ω_b = " << fmt(omegaOpt, 6);
+    if (std::abs(omega - omegaOpt) < 0.01)
+        oss << " （当前ω接近最优）\n";
+    else
+        oss << " （建议调整ω）\n";
+    oss << "  迭代矩阵谱半径 ρ(B_ω) = " << fmt(result.spectralRadius, 8);
+    if (result.spectralRadius < 1.0)
+        oss << " < 1（充要条件满足，必收敛）\n";
+    else
+        oss << " ≥ 1（不满足收敛条件）\n";
+    oss << "\n";
+
+    if (result.success)
+    {
+        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
+        oss << "解向量：\n";
+        for (int i = 0; i < (int)result.solution.size(); ++i)
+            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+    }
+    else
+    {
+        oss << "求解失败：" << result.errorMsg << "\n";
+        if (!result.solution.empty())
+        {
+            oss << "当前近似解：\n";
+            for (int i = 0; i < (int)result.solution.size(); ++i)
+                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
+        }
+    }
+
+    UiOutputPane::TableData tbl;
+    tbl.headers.push_back("k");
+    for (int i = 0; i < n; ++i)
+        tbl.headers.push_back("x" + std::to_string(i + 1));
+    tbl.headers.push_back("误差");
+
+    for (size_t k = 0; k < result.iterations.size(); ++k)
+    {
+        std::vector<std::string> row;
+        row.push_back(std::to_string(k));
+        for (int i = 0; i < n; ++i)
+            row.push_back(fmt(result.iterations[k][i], 8));
+        if (k > 0 && k - 1 < result.errors.size())
+            row.push_back(fmt(result.errors[k - 1], 8));
+        else
+            row.push_back("-");
+        tbl.rows.push_back(row);
+    }
+
+    st.last.summary = oss.str();
+    st.last.table = std::move(tbl);
+    st.last.plot = {};
+    st.last.extraTables.clear();
+
+    // 迭代矩阵
+    UiOutputPane::TableData tbl2;
+    tbl2.headers.push_back("");
+    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+        tbl2.headers.push_back("x" + std::to_string(j + 1));
+    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
+    {
+        std::vector<std::string> row;
+        row.push_back("[" + std::to_string(i + 1) + "]");
+        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
+            row.push_back(fmt(result.iterationMatrix(i, j), 6));
+        tbl2.rows.push_back(row);
+    }
+    st.last.extraTables.push_back({"B_ω矩阵", tbl2});
+    st.last.has = true;
+
+    ui_.output().clear();
+    ui_.output().addTextTab("摘要", st.last.summary);
+    ui_.output().addTableTab("迭代过程", st.last.table);
+    ui_.output().addTableTab("B_ω矩阵", tbl2);
 }
 
 void Manager::computeFullPivoting(const std::string &name)

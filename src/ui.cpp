@@ -517,16 +517,30 @@ void UI::loopExperiment()
         {
             // Tab 头
             int tabX = leftX;
+            int renderedTabs = 0;
             for (int i = 0; i < (int)output_.tabs().size(); ++i)
             {
                 const auto &t = output_.tabs()[i];
                 std::string cap = " " + t.title + " ";
+
+                // 检查是否超出宽度
+                if (tabX + (int)cap.size() > leftX + leftW - 5)
+                {
+                    // 如果还有未显示的标签页，添加省略号提示
+                    if (i < (int)output_.tabs().size() - 1)
+                    {
+                        mvprintw(y + 2, tabX, "...");
+                    }
+                    break;
+                }
+
                 if (i == output_.selected())
                     attron(COLOR_PAIR(5));
                 mvprintw(y + 2, tabX, "%s", cap.c_str());
                 if (i == output_.selected())
                     attroff(COLOR_PAIR(5));
                 tabX += (int)cap.size() + 1;
+                renderedTabs++;
             }
 
             // 内容区

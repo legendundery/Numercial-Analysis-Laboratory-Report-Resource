@@ -30,9 +30,10 @@ public:
 private:
     struct ResultSnapshot
     {
-        UiOutputPane::TableData table; // 最近一次的迭代表
-        std::string summary;           // 文本摘要
-        UiOutputPane::PlotData plot;   // 最近一次的绘图数据
+        UiOutputPane::TableData table;                                            // 最近一次的迭代表
+        std::string summary;                                                      // 文本摘要
+        UiOutputPane::PlotData plot;                                              // 最近一次的绘图数据
+        std::vector<std::pair<std::string, UiOutputPane::TableData>> extraTables; // 额外的表格标签页（如迭代矩阵）
         bool has = false;
     };
     struct ExperimentState
@@ -66,6 +67,9 @@ private:
     void computeThomas(const std::string &name);
     void computeColumnPivoting(const std::string &name);
     void computeFullPivoting(const std::string &name);
+    void computeJacobi(const std::string &name);
+    void computeGaussSeidel(const std::string &name);
+    void computeSOR(const std::string &name);
     void ensurePresets();
     void cyclePresetFor(const std::string &name, int delta);
 
