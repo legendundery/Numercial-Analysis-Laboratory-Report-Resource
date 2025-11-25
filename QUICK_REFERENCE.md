@@ -1,6 +1,36 @@
 # UI API 快速参考
 
-## 核心问题解答
+## ⚠️ 重要提示
+
+**本项目采用 Manager 架构模式**。以下直接使用 UI API 的方式仅供参考，**实际开发请使用 Manager 类**。
+
+```cpp
+int main() {
+    int status = 1;
+    UI ui(status);
+    Manager manager(ui);  // 推荐：使用 Manager
+    ui.run();
+    return 0;
+}
+```
+
+Manager 提供：
+- ✅ 自动实验管理和状态保存
+- ✅ 预设系统（函数预设、矩阵预设）
+- ✅ 输入字段自动配置
+- ✅ 结果快照和恢复
+- ✅ 多标签页输出管理
+
+**参考实现**：
+- 第二章：`computeNewton`, `computeBisection` 等
+- 第三章：`computeGaussElimination`, `computeCholesky` 等
+- 第四章：`computeJacobi`, `computeGaussSeidel`, `computeSOR`
+
+详见 `src/manager.cpp` 和 `CHAPTER4_GUIDE.md`。
+
+---
+
+## 核心问题解答（直接使用 UI API 时）
 
 ### ❓ 如何知道当前是哪个实验？
 

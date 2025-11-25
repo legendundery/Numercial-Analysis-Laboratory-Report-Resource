@@ -4,7 +4,25 @@
 
 UI 框架现在支持两种输入模式：
 1. **单输入框模式**（默认）- 向后兼容原有 API
-2. **多输入框模式**（新功能）- 支持多个标签化输入框
+2. **多输入框模式**（推荐）- 支持多个标签化输入框
+
+## 推荐使用方式
+
+**在实际项目中，建议使用 Manager 架构**，Manager 会自动处理输入字段的配置和读取：
+
+```cpp
+int main() {
+    int status = 1;
+    UI ui(status);
+    Manager manager(ui);  // Manager 自动管理输入字段
+    ui.run();
+    return 0;
+}
+```
+
+Manager 的 `ExperimentState` 结构包含 `std::vector<InputField> fields`，在实验切换时自动加载。
+
+以下 API 说明适用于**不使用 Manager** 或需要**自定义扩展**的场景。
 
 ---
 
@@ -130,38 +148,56 @@ int getInputFieldCount() const;   // 获取输入框数量
 
 ### 示例 1: 牛顿迭代法（多参数输入）
 
+**推荐方式：在 Manager 中实现**
+
+```cpp
+// 在 manager.cpp 中
+void Manager::computeNewton(const std::string &name) {
+    auto &st = states_[name];
+    
+    // 读取输入字段（Manager 已自动配置）
+    double x0 = toDouble(ui_.getInputValue(0), 1.5);
+    double eps = toDouble(ui_.getInputValue(1), 1e-6);
+    int maxIter = toInt(ui_.getInputValue(2), 20);
+    
+    // 调用 calc 层算法
+    auto result = calc::newtonMethod(x0, eps, maxIter);
+    
+    // 构建输出...
+    st.last.summary = ...;
+    st.last.table = ...;
+    st.last.has = true;
+    
+    ui_.output().clear();
+    ui_.output().addTextTab("摘要", st.last.summary);
+    ui_.output().addTableTab("迭代过程", st.last.table);
+}
+
+// 在 ensureDefaultsFor 中配置输入字段
+void Manager::ensureDefaultsFor(const std::string &name) {
+    if (name.find("牛顿") != std::string::npos) {
+        st.fields = {
+            {"初值 x0:", "1.5", ""},
+            {"容差 ε:", "1e-6", ""},
+            {"最大迭代次数:", "20", ""}
+        };
+    }
+}
+```
+
+**手动方式（不推荐）：**
+
 ```cpp
 ui.onExperimentChanged([](const std::string& expName) {
     if (expName.find("牛顿") != std::string::npos) {
         UI* ui = UI::instance();
-        
-        // 设置说明
-        ui->setDescription(
-            "牛顿迭代法求解方程 f(x) = x² - 2 = 0\n"
-            "请输入以下参数：");
-        
-        // 清空旧输入框
+        ui->setDescription("牛顿迭代法...");
         ui->clearInputFields();
-        
-        // 添加多个输入框
         ui->addInputField("初值 x0:", "1.5", "");
         ui->addInputField("容差 ε:", "1e-6", "");
         ui->addInputField("最大迭代次数:", "20", "");
-        
         ui->output().clear();
     }
-});
-
-ui.onInputSubmit([](const std::string& input) {
-    UI* ui = UI::instance();
-    
-    // 获取各个输入值
-    double x0 = std::stod(ui->getInputValue(0));
-    double eps = std::stod(ui->getInputValue(1));
-    int maxIter = std::stoi(ui->getInputValue(2));
-    
-    // 执行计算...
-    runNewtonMethod(x0, eps, maxIter);
 });
 ```
 

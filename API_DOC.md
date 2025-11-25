@@ -1,11 +1,106 @@
 # UI API 使用文档
 
 ## 概述
-本 UI 框架基于 PDCurses，提供实验说明、输入区、输出区三大内容区域的交互接口。
+本 UI 框架基于 PDCurses，采用 **UI → Manager → Calc** 三层架构：
+
+- **UI 层** (`ui.cpp/ui.h`)：负责界面渲染、用户交互、焦点管理
+- **Manager 层** (`manager.cpp/manager.h`)：负责实验管理、数据保存、预设系统、结果展示
+- **Calc 层** (`calc.cpp/calc.h`)：纯算法实现，无 UI 依赖
+
+本文档主要介绍 **UI 层** 的直接 API。对于完整的应用开发，建议参考 Manager 层的实现模式。
 
 ---
 
-## 1. 获取 UI 实例
+## 1. 推荐使用模式：Manager 架构
+
+### 1.1 为什么使用 Manager？
+
+直接使用 UI API 虽然可行，但对于复杂的数值分析应用，**推荐使用 Manager 模式**：
+
+```cpp
+int main() {
+    int status = 1;
+    UI ui(status);
+    Manager manager(ui);  // Manager 自动绑定所有回调
+    
+    ui.run();
+    return 0;
+}
+```
+
+**Manager 提供的功能：**
+- ✅ 自动管理实验切换和状态保存
+- ✅ 预设系统（函数预设、矩阵预设）
+- ✅ 输入字段自动配置
+- ✅ 结果快照和恢复（切换实验时不丢失数据）
+- ✅ 统一的错误处理
+- ✅ 多标签页输出管理
+
+### 1.2 Manager 的工作流程
+
+```
+用户选择实验
+    ↓
+manager.initExperiment()  → 设置说明文案
+    ↓                      → 配置输入字段
+manager.useExperiment()   → 恢复上次结果（如果有）
+    ↓
+用户输入参数并按回车
+    ↓
+manager.saveExperiment()  → 保存当前输入
+    ↓
+manager.computeExperiment() → 调用 calc 层算法
+    ↓                        → 生成多标签页输出
+    ↓                        → 保存结果快照
+显示结果
+```
+
+### 1.3 扩展 Manager
+
+添加新实验只需在 Manager 中实现对应的 `computeXXX` 方法：
+
+```cpp
+void Manager::computeMyMethod(const std::string &name) {
+    auto &st = states_[name];
+    
+    // 1. 读取输入参数
+    double param1 = toDouble(ui_.getInputValue(0), 1.0);
+    double param2 = toDouble(ui_.getInputValue(1), 0.001);
+    
+    // 2. 调用 calc 层算法
+    auto result = calc::myAlgorithm(param1, param2);
+    
+    // 3. 构建输出
+    std::ostringstream oss;
+    oss << "方法：我的算法\n";
+    oss << "参数1 = " << param1 << "\n";
+    if (result.success)
+        oss << "结果 = " << result.value << "\n";
+    else
+        oss << "失败：" << result.errorMsg << "\n";
+    
+    UiOutputPane::TableData tbl;
+    // ... 填充表格数据
+    
+    // 4. 保存结果快照
+    st.last.summary = oss.str();
+    st.last.table = std::move(tbl);
+    st.last.has = true;
+    
+    // 5. 显示输出
+    ui_.output().clear();
+    ui_.output().addTextTab("摘要", st.last.summary);
+    ui_.output().addTableTab("详细数据", st.last.table);
+}
+```
+
+---
+
+## 2. 直接使用 UI API（不推荐用于复杂应用）
+
+如果你需要直接使用 UI API（例如快速原型或简单工具），以下是完整的 API 说明。
+
+### 2.1 获取 UI 实例
 
 ```cpp
 // 通过单例访问 UI
@@ -14,15 +109,15 @@ UI* ui = UI::instance();
 
 ---
 
-## 2. 输出区域 API
+## 3. 输出区域 API
 
-### 2.1 获取输出面板
+### 3.1 获取输出面板
 
 ```cpp
 UiOutputPane& out = UI::instance()->output();
 ```
 
-### 2.2 添加文本输出
+### 3.2 添加文本输出
 
 ```cpp
 // 添加文本标签页
@@ -37,7 +132,7 @@ int tabIndex = out.addTextTab("结果", "计算完成！\n迭代次数: 10\n误�
 
 ---
 
-### 2.3 添加表格输出
+### 3.3 添加表格输出
 
 ```cpp
 // 构造表格数据
@@ -61,7 +156,7 @@ int tabIndex = out.addTableTab("迭代表", table);
 
 ---
 
-### 2.4 添加折线图输出（ASCII）
+### 3.4 添加折线图输出（ASCII）
 
 ```cpp
 // 构造曲线数据
@@ -88,7 +183,7 @@ int tabIndex = out.addPlotTab("收敛曲线", plot);
 
 ---
 
-### 2.5 清空所有输出
+### 3.5 清空所有输出
 
 ```cpp
 out.clear();  // 移除所有标签页
@@ -96,7 +191,7 @@ out.clear();  // 移除所有标签页
 
 ---
 
-### 2.6 切换当前显示的标签页
+### 3.6 切换当前显示的标签页
 
 ```cpp
 out.setSelected(0);  // 切换到第一个标签页
@@ -104,7 +199,9 @@ out.setSelected(0);  // 切换到第一个标签页
 
 ---
 
-### 2.7 访问标签页数据（高级用法）
+### 3.7 访问标签页数据（高级用法）
+
+**注意**：在 Manager 架构中，标签页通过 `ResultSnapshot` 管理，支持自动恢复。
 
 ```cpp
 // 获取所有标签页（只读）
@@ -135,7 +232,7 @@ if (!out.tabs().empty()) {
 
 ---
 
-## 3. 输入区域访问（需扩展 API）
+## 4. 输入区域 API
 
 ### 当前实现
 输入区提供完整的读写接口和确认回调。
@@ -161,7 +258,7 @@ UI::instance()->onInputSubmit([](const std::string& input) {
 
 ---
 
-## 4. 当前实验跟踪
+## 5. 当前实验跟踪
 
 ### 获取当前实验名称
 
@@ -182,9 +279,11 @@ UI::instance()->onExperimentChanged([](const std::string& expName) {
 
 ---
 
-## 5. 回调触发时机说明
+## 6. 回调触发时机说明（Manager 自动处理）
 
-### 5.1 实验切换回调 `onExperimentChanged`
+**注意**：在 Manager 架构中，这些回调已经自动绑定。只有在不使用 Manager 时才需要手动注册。
+
+### 6.1 实验切换回调 `onExperimentChanged`
 
 **触发条件：**
 - 用户在实验列表中点击实验项（非章节）
@@ -206,7 +305,7 @@ ui.onExperimentChanged([](const std::string& expName) {
 });
 ```
 
-### 5.2 输入确认回调 `onInputSubmit`
+### 6.2 输入确认回调 `onInputSubmit`
 
 **触发条件：**
 - 用户在输入区（焦点在输入区域）按回车键
@@ -230,9 +329,21 @@ ui.onInputSubmit([](const std::string& input) {
 
 ---
 
-## 6. 完整使用示例
+## 7. 完整使用示例
 
-### 推荐架构：统一处理入口
+### 7.1 推荐方式：使用 Manager（参考 main.cpp）
+
+```cpp
+int main() {
+    int status = 1;
+    UI ui(status);
+    Manager manager(ui);  // 所有逻辑由 Manager 处理
+    ui.run();
+    return 0;
+}
+```
+
+### 7.2 手动注册回调（不使用 Manager）
 
 ```cpp
 int main()
@@ -280,7 +391,7 @@ int main()
 }
 ```
 
-### 示例 1: 牛顿迭代法（完整流程）展示
+### 7.3 示例：牛顿迭代法（完整流程）
 
 ```cpp
 #include "ui.h"
@@ -339,7 +450,7 @@ void runNewtonMethod() {
 }
 ```
 
-### 示例 2: 读取输入并计算（需先扩展输入 API）
+### 7.4 示例：读取输入并计算
 
 ```cpp
 void processUserInput() {
@@ -367,7 +478,7 @@ void processUserInput() {
 
 ---
 
-## 5. 线程安全说明
+## 8. 线程安全说明
 
 **注意：** 当前实现不是线程安全的。如果需要在后台线程中更新 UI，请确保：
 1. 使用互斥锁保护 UI 访问
@@ -375,7 +486,7 @@ void processUserInput() {
 
 ---
 
-## 6. 最佳实践
+## 9. 最佳实践
 
 1. **输出更新时机**：在用户按下回车确认输入后，清空旧输出并添加新结果
 2. **标签页数量**：建议不超过 5-6 个，避免标签栏过于拥挤
@@ -385,27 +496,49 @@ void processUserInput() {
 
 ---
 
-## 7. 待扩展功能
+## 10. 架构参考
 
-以下功能可根据需要添加到 API：
+### Manager 层核心结构
 
 ```cpp
-// UI 类建议扩展
-class UI {
-public:
-    // 输入区
-    std::string getInput() const;
-    void setInput(const std::string& text);
-    void clearInput();
+class Manager {
+private:
+    struct ResultSnapshot {
+        UiOutputPane::TableData table;
+        std::string summary;
+        UiOutputPane::PlotData plot;
+        std::vector<std::pair<std::string, UiOutputPane::TableData>> extraTables;
+        bool has = false;
+    };
     
-    // 说明区
-    void setDescription(const std::string& desc);
-    std::string getDescription() const;
+    struct ExperimentState {
+        std::vector<InputField> fields;
+        std::string description;
+        ResultSnapshot last;
+        int presetIndex = 0;
+        calc::Matrix matrixA;        // 第三、四章使用
+        std::vector<double> vectorB; // 第三、四章使用
+        int matrixPresetIndex = 0;
+    };
     
-    // 实验切换回调
-    using ExperimentCallback = std::function<void(const std::string& expName)>;
-    void onExperimentChanged(ExperimentCallback cb);
+    UI &ui_;
+    std::unordered_map<std::string, ExperimentState> states_;
 };
 ```
 
-如需这些扩展功能，可通知我进行实现。
+### 实现新算法的步骤
+
+1. 在 `calc.cpp` 中实现纯算法函数
+2. 在 `manager.h` 中声明 `computeXXX` 方法
+3. 在 `manager.cpp` 中实现计算逻辑
+4. 在 `computeExperiment` 中添加分发逻辑
+5. 在 `fillDescriptionFor` 中添加说明文案
+6. （可选）在 `ensureDefaultsFor` 中设置输入字段
+
+### 参考实现
+
+- **第二章**：`computeNewton`, `computeBisection` 等
+- **第三章**：`computeGaussElimination`, `computeCholesky` 等
+- **第四章**：`computeJacobi`, `computeGaussSeidel`, `computeSOR`
+
+完整代码参见 `src/manager.cpp`。
