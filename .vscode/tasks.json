@@ -16,6 +16,9 @@
         "${workspaceFolder}/src/ui.cpp",
         "${workspaceFolder}/src/calc.cpp",
         "${workspaceFolder}/src/manager.cpp",
+        "${workspaceFolder}/src/compute.cpp",
+        "${workspaceFolder}/src/MatrixPresets.cpp",
+        "${workspaceFolder}/src/ValueTablePresets.cpp",
         "-o",
         "${workspaceFolder}/main.exe",
         "-lpdcurses", // libpdcurses.a

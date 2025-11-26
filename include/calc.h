@@ -100,6 +100,7 @@ namespace calc
     // 全主元素法：每次选取全部剩余元素中绝对值最大的交换到主元位置
     GaussResult fullPivoting(const Matrix &A, const std::vector<double> &b);
 
+
     // ==================== 矩阵工具函数 ====================
 
     // 矩阵范数
@@ -131,6 +132,7 @@ namespace calc
     // 计算SOR方法的最优松弛因子（针对对角占优矩阵）
     double optimalOmegaSOR(const Matrix &A);
 
+
     // ==================== 迭代法求解线性方程组 ====================
 
     // 迭代法结果
@@ -157,6 +159,115 @@ namespace calc
     // 松弛迭代法（SOR）
     IterativeResult sorIteration(const Matrix &A, const std::vector<double> &b,
                                  const std::vector<double> &x0, int maxIter, double tol, double omega);
+
+                                 
+    // ==================== 插值法基础工具 ====================
+
+    // 差分表（Forward Difference Table）
+    // 输入：函数值序列 y = [y0, y1, ..., yn]
+    // 输出：差分表，table[i][j] 表示 Δ^j y_i
+    //       table[0] = [y0, Δy0, Δ²y0, ...]
+    //       table[1] = [y1, Δy1, Δ²y1, ...]
+    std::vector<std::vector<double>> forwardDifferenceTable(const std::vector<double> &y);
+
+    // 后向差分表（Backward Difference Table）
+    // 输入：函数值序列 y = [y0, y1, ..., yn]
+    // 输出：后向差分表，table[i][j] 表示 ∇^j y_i
+    std::vector<std::vector<double>> backwardDifferenceTable(const std::vector<double> &y);
+
+    // 差商表（Divided Difference Table）
+    // 输入：节点 x = [x0, x1, ..., xn] 和函数值 y = [y0, y1, ..., yn]
+    // 输出：差商表，table[i][j] 表示 f[x_i, x_{i+1}, ..., x_{i+j}]
+    //       table[0] = [f[x0], f[x0,x1], f[x0,x1,x2], ...]
+    //       table[1] = [f[x1], f[x1,x2], ...]
+    std::vector<std::vector<double>> dividedDifferenceTable(const std::vector<double> &x,
+                                                            const std::vector<double> &y);
+
+    // 广义组合数（Generalized Binomial Coefficient）
+    // C(t, n) = t(t-1)(t-2)...(t-n+1) / n!
+    // 用于牛顿插值公式中的系数计算
+    double generalizedBinomial(double t, int n);
+
+    // 阶乘
+    long long factorial(int n);
+
+    // 插值结果结构
+    struct InterpolationResult
+    {
+        bool success = false;
+        double value;                           // 插值结果
+        std::string errorMsg;                   // 错误信息
+        std::vector<std::vector<double>> table; // 差分表或差商表
+        std::vector<double> coefficients;       // 插值多项式系数
+        std::string polynomial;                 // 插值多项式表达式（字符串形式）
+        std::vector<std::string> stepDesc;      // 计算步骤描述
+        std::string method;                     // 使用的插值方法（前插/后插/斯梯林/贝塞尔）
+        double t;                               // 归一化参数 t = (x - x0) / h
+        int baseIndex;                          // 基准节点索引 x0 在数据中的位置
+    };
+
+    // 牛顿差商插值（不等距节点）
+    // 输入：节点 x, 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 P_n(xVal) 及计算过程
+    InterpolationResult newtonDividedDifference(const std::vector<double> &x,
+                                                const std::vector<double> &y,
+                                                double xVal);
+
+    // 牛顿前插公式（等距节点）
+    // 输入：节点 x (等距), 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 P_n(xVal) 及计算过程
+    // 适用于 x 在前部区间，即 t = (xVal - x[0]) / h 在 [0, 1] 附近
+    InterpolationResult newtonForwardDifference(const std::vector<double> &x,
+                                                const std::vector<double> &y,
+                                                double xVal);
+
+    // 牛顿后插公式（等距节点）
+    // 输入：节点 x (等距), 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 P_n(xVal) 及计算过程
+    // 适用于 x 在后部区间，即 t = (xVal - x[n]) / h 在 [-1, 0] 附近
+    InterpolationResult newtonBackwardDifference(const std::vector<double> &x,
+                                                 const std::vector<double> &y,
+                                                 double xVal);
+
+    // 斯梯林插值公式（等距节点）
+    // 输入：节点 x (等距), 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 P_n(xVal) 及计算过程
+    // 适用于 x 在中部区间，使用中心差分
+    InterpolationResult stirlingInterpolation(const std::vector<double> &x,
+                                              const std::vector<double> &y,
+                                              double xVal);
+
+    // 贝塞尔插值公式（等距节点）
+    // 输入：节点 x (等距), 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 P_n(xVal) 及计算过程
+    // 适用于 x 在中部区间（与斯梯林类似）
+    InterpolationResult besselInterpolation(const std::vector<double> &x,
+                                            const std::vector<double> &y,
+                                            double xVal);
+
+    // 拉格朗日插值公式
+    // 输入：节点 x, 函数值 y, 插值点 xVal
+    // 输出：插值结果，包含 L_n(xVal) 及计算过程
+    // L_n(x) = Σ[i=0 to n] l_i(x)·f(x_i)
+    // 其中 l_i(x) = Π[j≠i] (x-x_j)/(x_i-x_j)
+    // 适用于任意节点分布，计算简单但数值稳定性较差
+    InterpolationResult lagrangeInterpolation(const std::vector<double> &x,
+                                              const std::vector<double> &y,
+                                              double xVal);
+
+    // 等距节点检查与插值方法选择
+    // 输入：节点 x, 插值点 xVal
+    // 输出：{是否等距, 间距h, 推荐方法名称, t值, 基准索引}
+    struct InterpolationMethodInfo
+    {
+        bool isEquidistant = false;
+        double h = 0.0;
+        std::string recommendedMethod; // "forward", "backward", "stirling", "bessel"
+        double t = 0.0;
+        int baseIndex = 0;
+        std::string reason; // 推荐原因
+    };
+    InterpolationMethodInfo selectInterpolationMethod(const std::vector<double> &x, double xVal);
 }
 
 #endif // CALC_H

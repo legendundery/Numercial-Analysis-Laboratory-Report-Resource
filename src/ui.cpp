@@ -203,7 +203,7 @@ void UI::buildExperimentTree()
     auto ch2 = ExperimentNode{"第二章 方程(组)的迭代解法", true, false, {{"1.1 画图法", false, false, {}}, {"1.2 对分法", false, false, {}}, {"1.3 扫描法", false, false, {}}, {"2.1 埃特肯法", false, false, {}}, {"2.2.1 牛顿迭代法", false, false, {}}, {"2.2.2 牛顿下山法", false, false, {}}, {"2.3.1 单点弦截法", false, false, {}}, {"2.3.2 双点弦截法", false, false, {}}}};
     auto ch3 = ExperimentNode{"第三章 解线性方程组的直接法", true, false, {{"1.1 高斯消元法", false, false, {}}, {"1.2 克劳特消元法", false, false, {}}, {"2. 平方根法", false, false, {}}, {"3. （追赶法）", false, false, {}}, {"4.1 列主元素法", false, false, {}}, {"4.2 全主元素法", false, false, {}}}};
     auto ch4 = ExperimentNode{"第四章 解线性方程组的迭代法", true, false, {{"1. 雅可比迭代法", false, false, {}}, {"2. 高斯-赛德尔迭代法", false, false, {}}, {"3. 松弛迭代法", false, false, {}}}};
-    auto ch5 = ExperimentNode{"第五章 插值法", true, false, {{"1. 差商/差分", false, false, {}}, {"2. 不等距牛顿差商", false, false, {}}, {"3. 等距牛顿差分", false, false, {}}, {"4. 牛顿前插", false, false, {}}, {"5. 牛顿后插", false, false, {}}, {"6. 拉格朗日插值", false, false, {}}, {"7. 反插值", false, false, {}}, {"8. 埃尔米特插值", false, false, {}}}};
+    auto ch5 = ExperimentNode{"第五章 插值法", true, false, {{"1. 差商/差分", false, false, {}}, {"2. 不等距牛顿差商", false, false, {}}, {"3. 等距牛顿差分", false, false, {}}, {"4. 拉格朗日插值", false, false, {}}, {"5. 反插值", false, false, {}}, {"6. 埃尔米特插值", false, false, {}}}};
     auto ch6 = ExperimentNode{"第六章 数值积分", true, false, {{"1. 牛顿-科特斯/复化", false, false, {}}, {"2. 复合梯形/辛普森", false, false, {}}, {"3. 龙贝格法", false, false, {}}, {"4. 高斯求积", false, false, {}}}};
     tree_.push_back(ch2);
     tree_.push_back(ch3);

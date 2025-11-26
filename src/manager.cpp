@@ -1,7 +1,8 @@
-#include "manager.h"
+﻿#include "manager.h"
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <sstream>
 #include <pdcurses.h>
 
@@ -35,7 +36,10 @@ void Manager::bindUiCallbacks()
             name.find("平方根法") == std::string::npos &&
             name.find("追赶法") == std::string::npos &&
             name.find("列主元素法") == std::string::npos &&
-            name.find("全主元素法") == std::string::npos)
+            name.find("全主元素法") == std::string::npos &&
+            name.find("差商") == std::string::npos &&
+            name.find("差分") == std::string::npos &&
+            name.find("拉格朗日") == std::string::npos)
         {
             useExperiment(name);
         } });
@@ -44,8 +48,15 @@ void Manager::bindUiCallbacks()
                        {
         const auto name = ui_.getCurrentExperiment();
         if (name.empty()) return;
+        // 函数值表类方法：切换函数值表预设
+        if (name.find("差商") != std::string::npos ||
+            name.find("差分") != std::string::npos ||
+            name.find("拉格朗日") != std::string::npos)
+        {
+            cycleValueTablePresetFor(name, delta);
+        }
         // 矩阵类方法：切换矩阵预设
-        if (name.find("高斯消元") != std::string::npos ||
+        else if (name.find("高斯消元") != std::string::npos ||
             name.find("克劳特消元") != std::string::npos ||
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
@@ -67,8 +78,15 @@ void Manager::bindUiCallbacks()
                     { 
         const auto name = ui_.getCurrentExperiment();
         if (name.empty()) return;
+        // 函数值表类方法：添加函数值表预设
+        if (name.find("差商") != std::string::npos ||
+            name.find("差分") != std::string::npos ||
+            name.find("拉格朗日") != std::string::npos)
+        {
+            addValueTablePreset();
+        }
         // 矩阵类方法：添加矩阵预设
-        if (name.find("高斯消元") != std::string::npos ||
+        else if (name.find("高斯消元") != std::string::npos ||
             name.find("克劳特消元") != std::string::npos ||
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
@@ -89,8 +107,15 @@ void Manager::bindUiCallbacks()
                       {
         const auto name = ui_.getCurrentExperiment();
         if (name.empty()) return;
+        // 函数值表类方法：支持函数值表编辑
+        if (name.find("差商") != std::string::npos ||
+            name.find("差分") != std::string::npos ||
+            name.find("拉格朗日") != std::string::npos)
+        {
+            showValueTableInputDialog(name, false);
+        }
         // 矩阵类方法均支持矩阵编辑
-        if (name.find("高斯消元") != std::string::npos ||
+        else if (name.find("高斯消元") != std::string::npos ||
             name.find("克劳特消元") != std::string::npos ||
             name.find("平方根法") != std::string::npos ||
             name.find("追赶法") != std::string::npos ||
@@ -254,6 +279,26 @@ void Manager::computeExperiment(const std::string &name)
         computeSOR(name);
         return;
     }
+    if (name.find("差商") != string::npos && name.find("不等距") != string::npos)
+    {
+        computeNewtonDividedDiff(name);
+        return;
+    }
+    if (name.find("差分") != string::npos && name.find("等距") != string::npos)
+    {
+        computeNewtonEqualDiff(name);
+        return;
+    }
+    if (name.find("拉格朗日") != string::npos)
+    {
+        computeLagrange(name);
+        return;
+    }
+    if (name.find("差商") != string::npos || name.find("差分") != string::npos)
+    {
+        computeDividedDifference(name);
+        return;
+    }
     // 其他实验暂未实现
     auto &st = states_[name];
     st.last = {};
@@ -360,6 +405,49 @@ void Manager::ensureDefaultsFor(const std::string &name)
         st.fields.push_back({"精度 tol:", "1e-6", "如 1e-6", 20});
         st.fields.push_back({"最大迭代次数:", "100", "整数", 10});
         st.fields.push_back({"松弛因子 ω:", "1.2", "(0,2) 内实数", 20});
+    }
+    else if (name.find("不等距") != string::npos && name.find("差商") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
+        st.fields.push_back({"待求插值点 x:", "0.5", "实数", 50});
+        ensureValueTablePresets();
+        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
+    }
+    else if (name.find("等距") != string::npos && name.find("差分") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
+        st.fields.push_back({"待求插值点 x:", "0.5", "实数", 50});
+        ensureValueTablePresets();
+        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
+    }
+    else if (name.find("拉格朗日") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
+        st.fields.push_back({"待求插值点 x:", "1.5", "实数", 50});
+        ensureValueTablePresets();
+        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
+    }
+    else if (name.find("差商") != string::npos || name.find("差分") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
+        ensureValueTablePresets();
+        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
     }
     else
     {
@@ -610,898 +698,81 @@ void Manager::fillDescriptionFor(const std::string &name)
         }
         oss << "- 提示：按 [m] 编辑矩阵；设置精度、最大迭代次数和松弛因子\n";
     }
+    else if (name.find("不等距") != string::npos && name.find("差商") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "牛顿差商插值（不等距节点）：\n";
+        oss << "- 公式：P_n(x) = f[x_0] + (x-x_0)f[x_0,x_1] + (x-x_0)(x-x_1)f[x_0,x_1,x_2] + ...\n";
+        oss << "- 适用于任意节点分布（不要求等距）\n";
+        oss << "- 输入函数值表（至少2个点），包含 x_i 和 f(x_i)\n";
+        oss << "- 输入待求插值点 x，计算 P_n(x)\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "- 当前预设：" << preset.name << " (";
+            oss << preset.table.rows() << " 个点, ";
+            oss << preset.table.cols() << " 列)\n";
+        }
+        oss << "- 提示：按 [<] [>] 切换预设；按 [a] 创建新预设；按 [m] 编辑函数值表\n";
+    }
+    else if (name.find("等距") != string::npos && name.find("差分") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "牛顿差分插值（等距节点）：\n";
+        oss << "- 要求节点等距：x_i = x_0 + i·h，至少5个点\n";
+        oss << "- 四种公式：前插（t∈[0,1]）、后插（t∈[-1,0]）、斯梯林（中部）、贝塞尔（中部）\n";
+        oss << "- 程序将根据待求点 x 的位置自动选择最合适的公式\n";
+        oss << "- 输入函数值表（至少5个等距点），包含 x_i 和 f(x_i)\n";
+        oss << "- 输入待求插值点 x，自动选择方法并计算 P_n(x)\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "- 当前预设：" << preset.name << " (";
+            oss << preset.table.rows() << " 个点)\n";
+        }
+        oss << "- 提示：按 [<] [>] 切换预设（等距预设在前）；按 [m] 编辑函数值表\n";
+    }
+    else if (name.find("拉格朗日") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "拉格朗日插值公式：\n";
+        oss << "- 公式：L_n(x) = Σ[i=0 to n] l_i(x)·f(x_i)\n";
+        oss << "- 其中 l_i(x) = Π[j≠i] (x-x_j)/(x_i-x_j)\n";
+        oss << "- 适用于任意节点分布（等距或不等距均可）\n";
+        oss << "- 计算简单直观，但节点多时可能数值不稳定\n";
+        oss << "- 输入函数值表（至少2个点），包含 x_i 和 f(x_i)\n";
+        oss << "- 输入待求插值点 x，计算 L_n(x)\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "- 当前预设：" << preset.name << " (";
+            oss << preset.table.rows() << " 个点)\n";
+        }
+        oss << "- 提示：按 [<] [>] 切换预设；按 [a] 创建新预设；按 [m] 编辑函数值表\n";
+    }
+    else if (name.find("差商") != string::npos || name.find("差分") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "差商与差分：\n";
+        oss << "- 输入函数值表，包含 x_i, f(x_i) [, f'(x_i), ...]\n";
+        oss << "- 自动计算差商表（牛顿插值基础）\n";
+        oss << "- 若等距节点，还会计算前向差分表和后向差分表\n";
+        oss << "- 未知值可用 NaN 表示\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "- 当前预设：" << preset.name << " (";
+            oss << preset.table.rows() << " 个点, ";
+            oss << preset.table.cols() << " 列)\n";
+        }
+        oss << "- 提示：按 [<] [>] 切换预设；按 [a] 创建新预设；按 [m] 编辑当前函数值表\n";
+    }
     else
     {
         oss << "该实验暂未提供详细说明。\n";
     }
     states_[name].description = oss.str();
     ui_.setDescription(states_[name].description);
-}
-
-void Manager::computeBisection(const std::string &name)
-{
-    auto &st = states_[name];
-    // 解析输入
-    double a = toDouble(ui_.getInputValue(0), 1.0);
-    double b = toDouble(ui_.getInputValue(1), 2.0);
-    int maxIter = toInt(ui_.getInputValue(2), 50);
-    double tol = toDouble(ui_.getInputValue(3), 1e-6);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-    auto iters = calc::bisection(pz.f, a, b, maxIter, tol);
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x", "f(x)", "error"};
-    for (const auto &it : iters)
-    {
-        tbl.rows.push_back({std::to_string(it.k), fmt(it.x, 10), fmt(it.fx, 10), std::isinf(it.error) ? string("-") : fmt(it.error, 10)});
-    }
-
-    // 文本摘要
-    std::ostringstream oss;
-    oss << "方法：对分法\n";
-    oss << "区间：[" << fmt(a) << ", " << fmt(b) << "]\n";
-    oss << "tol=" << tol << ", maxIter=" << maxIter << "\n";
-    if (!iters.empty())
-        oss << "近似根：x≈" << fmt(iters.back().x, 12) << ", 步数：" << iters.size() << "\n";
-    else
-        oss << "前置条件不满足或未能计算。\n";
-
-    // 绘图：以零点为中心，取区间长度的 1/3 作为绘图范围
-    UiOutputPane::PlotData plot;
-    double xa = std::min(a, b), xb = std::max(a, b);
-    if (!iters.empty() && std::isfinite(iters.back().x))
-    {
-        double root = iters.back().x;
-        double span = (xb - xa) / 3.0;
-        if (span < 1e-6)
-            span = 1.0; // 避免太小
-        double plotXMin = root - span / 2.0;
-        double plotXMax = root + span / 2.0;
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = plotXMin;
-        plot.xmax = plotXMax;
-        // 计算 y 范围
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = true;
-        plot.rootX = root;
-    }
-    else if (std::isfinite(xa) && std::isfinite(xb) && xb > xa)
-    {
-        // 如果没有找到根，则在输入区间上绘图
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = xa + (xb - xa) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = xa;
-        plot.xmax = xb;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computeNewton(const std::string &name)
-{
-    auto &st = states_[name];
-    double x0 = toDouble(ui_.getInputValue(0), 1.0);
-    int maxIter = toInt(ui_.getInputValue(1), 50);
-    double tol = toDouble(ui_.getInputValue(2), 1e-6);
-
-    const auto &pz2 = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-    std::vector<calc::Iteration> iters = {};
-    if (pz2.hasDf)
-        iters = calc::newton(pz2.f, pz2.df, x0, maxIter, tol);
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x", "f(x)", "error"};
-    for (const auto &it : iters)
-    {
-        tbl.rows.push_back({std::to_string(it.k), fmt(it.x, 10), fmt(it.fx, 10), std::isinf(it.error) ? string("-") : fmt(it.error, 10)});
-    }
-
-    std::ostringstream oss;
-    oss << "方法：牛顿迭代法\n";
-    oss << "初值：x0=" << fmt(x0) << ", tol=" << tol << ", maxIter=" << maxIter << "\n";
-    if (!iters.empty())
-        oss << "近似根：x≈" << fmt(iters.back().x, 12) << ", 步数：" << iters.size() << "\n";
-    else
-        oss << "未能计算，可能导数过小或发散。\n";
-
-    // 绘图：以迭代轨迹的最值为范围，如果找到零点则以零点为中心
-    UiOutputPane::PlotData plot;
-    if (!iters.empty())
-    {
-        double xmin = iters.front().x, xmax = iters.front().x;
-        for (const auto &it : iters)
-        {
-            xmin = std::min(xmin, it.x);
-            xmax = std::max(xmax, it.x);
-        }
-        double root = iters.back().x;
-        double span = (xmax - xmin);
-        if (span < 1e-6)
-            span = 1.0;
-        // 以根为中心，取迭代范围的 1.5 倍作为绘图范围
-        double plotXMin = root - span * 0.75;
-        double plotXMax = root + span * 0.75;
-        if (plotXMax > plotXMin)
-        {
-            int N = 80;
-            for (int i = 0; i <= N; ++i)
-            {
-                double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-                plot.xs.push_back(x);
-                plot.ys.push_back(pz2.f(x));
-            }
-            plot.xlabel = "x";
-            plot.ylabel = "f(x)";
-            plot.xmin = plotXMin;
-            plot.xmax = plotXMax;
-            double ymin = 1e100, ymax = -1e100;
-            for (double yv : plot.ys)
-            {
-                ymin = std::min(ymin, yv);
-                ymax = std::max(ymax, yv);
-            }
-            if (ymin == ymax)
-            {
-                ymin -= 1;
-                ymax += 1;
-            }
-            plot.ymin = ymin;
-            plot.ymax = ymax;
-            plot.hasRoot = true;
-            plot.rootX = root;
-        }
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computeAitken(const std::string &name)
-{
-    auto &st = states_[name];
-    double x0 = toDouble(ui_.getInputValue(0), 1.0);
-    int maxIter = toInt(ui_.getInputValue(1), 50);
-    double tol = toDouble(ui_.getInputValue(2), 1e-6);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-    if (!pz.hasDf)
-    {
-        st.last.summary = "埃特肯法需要导数 f'(x)，当前预设不可用。";
-        st.last.has = true;
-        return;
-    }
-
-    // 定义 φ(x) = x - f(x)/f'(x) (牛顿迭代格式)
-    auto phi = [&](double x) -> double
-    {
-        double dfx = pz.df(x);
-        if (std::abs(dfx) < 1e-15)
-            return x;
-        return x - pz.f(x) / dfx;
-    };
-
-    // 构建表格：k, x_n, y_n, z_n, x_{n+1}, error
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x_n", "y_n", "z_n", "x_{n+1}", "error"};
-
-    std::vector<double> xSeq;
-    double xn = x0;
-    xSeq.push_back(xn);
-
-    for (int k = 0; k < maxIter; ++k)
-    {
-        double yn = phi(xn);
-        double zn = phi(yn);
-
-        // 埃特肯公式: x_{n+1} = (x_n * z_n - y_n^2) / (x_n - 2*y_n + z_n)
-        double denom = xn - 2.0 * yn + zn;
-        double xnext;
-        if (std::abs(denom) < 1e-15)
-        {
-            // 分母接近0，使用 yn 作为下一个值
-            xnext = yn;
-        }
-        else
-        {
-            xnext = (xn * zn - yn * yn) / denom;
-        }
-
-        double error = std::abs(xnext - xn);
-
-        tbl.rows.push_back({std::to_string(k),
-                            fmt(xn, 10),
-                            fmt(yn, 10),
-                            fmt(zn, 10),
-                            fmt(xnext, 10),
-                            fmt(error, 10)});
-
-        xSeq.push_back(xnext);
-
-        if (error < tol)
-        {
-            xn = xnext;
-            break;
-        }
-
-        xn = xnext;
-    }
-
-    std::ostringstream oss;
-    oss << "方法：埃特肯（加速）法\n";
-    oss << "初值：x0=" << fmt(x0) << ", tol=" << tol << ", maxIter=" << maxIter << "\n";
-    oss << "迭代格式：先用牛顿法 φ(x) = x - f(x)/f'(x)\n";
-    oss << "埃特肯公式：x_{n+1} = (x_n·z_n - y_n²) / (x_n - 2y_n + z_n)\n";
-    if (!tbl.rows.empty())
-        oss << "近似根：x≈" << fmt(xn, 12) << ", 步数：" << tbl.rows.size() << "\n";
-    else
-        oss << "未能计算。\n";
-
-    // 绘图
-    UiOutputPane::PlotData plot;
-    if (xSeq.size() >= 2)
-    {
-        double xmin = *std::min_element(xSeq.begin(), xSeq.end());
-        double xmax = *std::max_element(xSeq.begin(), xSeq.end());
-        double root = xSeq.back();
-        double span = xmax - xmin;
-        if (span < 1e-6)
-            span = 1.0;
-        double plotXMin = root - span * 0.75;
-        double plotXMax = root + span * 0.75;
-
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = plotXMin;
-        plot.xmax = plotXMax;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = true;
-        plot.rootX = root;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computeNewtonDownhill(const std::string &name)
-{
-    auto &st = states_[name];
-    double x0 = toDouble(ui_.getInputValue(0), 1.0);
-    int maxIter = toInt(ui_.getInputValue(1), 50);
-    double tol = toDouble(ui_.getInputValue(2), 1e-6);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-    if (!pz.hasDf)
-    {
-        st.last.summary = "牛顿下山法需要导数 f'(x)，当前预设不可用。";
-        st.last.has = true;
-        return;
-    }
-
-    // 构建表格：k, x_n, f(x_n), λ, x_{n+1}, f(x_{n+1}), 下山条件
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x_n", "f(x_n)", "λ", "x_{n+1}", "f(x_{n+1})", "下山条件"};
-
-    std::vector<double> xSeq;
-    double xn = x0;
-    xSeq.push_back(xn);
-
-    for (int k = 0; k < maxIter; ++k)
-    {
-        double fxn = pz.f(xn);
-        double dfxn = pz.df(xn);
-
-        if (std::abs(dfxn) < 1e-15)
-        {
-            // 导数过小，无法继续
-            tbl.rows.push_back({std::to_string(k),
-                                fmt(xn, 10),
-                                fmt(fxn, 10),
-                                "-",
-                                "-",
-                                "-",
-                                "导数过小"});
-            break;
-        }
-
-        // 尝试 λ = 1, 1/2, 1/4, 1/8, ...
-        double lambda = 1.0;
-        double xnext = xn;
-        double fxnext = fxn;
-        bool found = false;
-        std::string lambdaStr = "-";
-
-        for (int j = 0; j < 10; ++j) // 最多尝试10次
-        {
-            double xtest = xn - lambda * fxn / dfxn;
-            double fxtest = pz.f(xtest);
-
-            if (std::abs(fxtest) < std::abs(fxn)) // 下山条件
-            {
-                xnext = xtest;
-                fxnext = fxtest;
-                lambdaStr = fmt(lambda, 6);
-                found = true;
-                break;
-            }
-            lambda /= 2.0;
-        }
-
-        std::string downhillStatus = found ? "满足" : "不满足";
-
-        tbl.rows.push_back({std::to_string(k),
-                            fmt(xn, 10),
-                            fmt(fxn, 10),
-                            lambdaStr,
-                            fmt(xnext, 10),
-                            fmt(fxnext, 10),
-                            downhillStatus});
-
-        if (!found)
-        {
-            // 无法找到满足下山条件的 λ
-            break;
-        }
-
-        xSeq.push_back(xnext);
-
-        double error = std::abs(xnext - xn);
-        if (error < tol || std::abs(fxnext) < tol)
-        {
-            xn = xnext;
-            break;
-        }
-
-        xn = xnext;
-    }
-
-    std::ostringstream oss;
-    oss << "方法：牛顿下山法\n";
-    oss << "初值：x0=" << fmt(x0) << ", tol=" << tol << ", maxIter=" << maxIter << "\n";
-    oss << "迭代公式：x_{n+1} = x_n - λ·f(x_n)/f'(x_n)\n";
-    oss << "下山条件：|f(x_{n+1})| < |f(x_n)|\n";
-    oss << "λ 取值序列：1, 1/2, 1/4, 1/8, ...\n";
-    if (!tbl.rows.empty() && xSeq.size() > 1)
-        oss << "近似根：x≈" << fmt(xn, 12) << ", 步数：" << tbl.rows.size() << "\n";
-    else
-        oss << "未能收敛。\n";
-
-    // 绘图
-    UiOutputPane::PlotData plot;
-    if (xSeq.size() >= 2)
-    {
-        double xmin = *std::min_element(xSeq.begin(), xSeq.end());
-        double xmax = *std::max_element(xSeq.begin(), xSeq.end());
-        double root = xSeq.back();
-        double span = xmax - xmin;
-        if (span < 1e-6)
-            span = 1.0;
-        double plotXMin = root - span * 0.75;
-        double plotXMax = root + span * 0.75;
-
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = plotXMin;
-        plot.xmax = plotXMax;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = true;
-        plot.rootX = root;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computeSecantSinglePoint(const std::string &name)
-{
-    auto &st = states_[name];
-    double x0 = toDouble(ui_.getInputValue(0), 1.0);
-    double x1 = toDouble(ui_.getInputValue(1), 1.5);
-    int maxIter = toInt(ui_.getInputValue(2), 50);
-    double tol = toDouble(ui_.getInputValue(3), 1e-6);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-
-    // 构建表格：k, x_n, f(x_n), x_{n+1}, error
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x_n", "f(x_n)", "f(x_0)", "x_{n+1}", "error"};
-
-    std::vector<double> xSeq;
-    double fx0 = pz.f(x0);
-    double xn = x1;
-    xSeq.push_back(x0);
-    xSeq.push_back(x1);
-
-    for (int k = 0; k < maxIter; ++k)
-    {
-        double fxn = pz.f(xn);
-
-        // 单点弦截法：x_{n+1} = [x_0 * f(x_n) - x_n * f(x_0)] / [f(x_n) - f(x_0)]
-        double denom = fxn - fx0;
-        if (std::abs(denom) < 1e-15)
-        {
-            // 分母过小，无法继续
-            tbl.rows.push_back({std::to_string(k),
-                                fmt(xn, 10),
-                                fmt(fxn, 10),
-                                fmt(fx0, 10),
-                                "-",
-                                "分母过小"});
-            break;
-        }
-
-        double xnext = (x0 * fxn - xn * fx0) / denom;
-        double error = std::abs(xnext - xn);
-
-        tbl.rows.push_back({std::to_string(k),
-                            fmt(xn, 10),
-                            fmt(fxn, 10),
-                            fmt(fx0, 10),
-                            fmt(xnext, 10),
-                            fmt(error, 10)});
-
-        xSeq.push_back(xnext);
-
-        if (error < tol || std::abs(pz.f(xnext)) < tol)
-        {
-            xn = xnext;
-            break;
-        }
-
-        xn = xnext;
-    }
-
-    std::ostringstream oss;
-    oss << "方法：单点弦截法（收敛阶数1）\n";
-    oss << "初值：x0=" << fmt(x0) << ", x1=" << fmt(x1) << ", tol=" << tol << ", maxIter=" << maxIter << "\n";
-    oss << "迭代公式：x_{n+1} = [x_0·f(x_n) - x_n·f(x_0)] / [f(x_n) - f(x_0)]\n";
-    oss << "说明：x_0 在迭代中保持不变，用于计算导数近似\n";
-    if (!tbl.rows.empty())
-        oss << "近似根：x≈" << fmt(xn, 12) << ", 步数：" << tbl.rows.size() << "\n";
-    else
-        oss << "未能收敛。\n";
-
-    // 绘图
-    UiOutputPane::PlotData plot;
-    if (xSeq.size() >= 2)
-    {
-        double xmin = *std::min_element(xSeq.begin(), xSeq.end());
-        double xmax = *std::max_element(xSeq.begin(), xSeq.end());
-        double root = xSeq.back();
-        double span = xmax - xmin;
-        if (span < 1e-6)
-            span = 1.0;
-        double plotXMin = root - span * 0.75;
-        double plotXMax = root + span * 0.75;
-
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = plotXMin;
-        plot.xmax = plotXMax;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = true;
-        plot.rootX = root;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computeSecantDoublePoint(const std::string &name)
-{
-    auto &st = states_[name];
-    double x0 = toDouble(ui_.getInputValue(0), 1.0);
-    double x1_input = toDouble(ui_.getInputValue(1), 1.5); // 输入的x1只作为参考
-    int maxIter = toInt(ui_.getInputValue(2), 50);
-    double tol = toDouble(ui_.getInputValue(3), 1e-6);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-
-    // 检查是否有导数
-    if (!pz.hasDf)
-    {
-        st.last.summary = "双点弦截法需要导数 f'(x) 来计算 x1，当前预设不可用。";
-        st.last.has = true;
-        return;
-    }
-
-    // 使用牛顿迭代公式计算 x1 = x0 - f(x0)/f'(x0)
-    double fx0 = pz.f(x0);
-    double dfx0 = pz.df(x0);
-    double x1;
-    if (std::abs(dfx0) < 1e-15)
-    {
-        // 导数过小，使用输入的x1
-        x1 = x1_input;
-    }
-    else
-    {
-        x1 = x0 - fx0 / dfx0;
-    }
-
-    // 构建表格：k, x_{n-1}, x_n, f(x_{n-1}), f(x_n), x_{n+1}, error
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"k", "x_{n-1}", "x_n", "f(x_{n-1})", "f(x_n)", "x_{n+1}", "error"};
-
-    std::vector<double> xSeq;
-    double xn_1 = x0; // x_{n-1}
-    double xn = x1;   // x_n
-    xSeq.push_back(xn_1);
-    xSeq.push_back(xn);
-
-    for (int k = 0; k < maxIter; ++k)
-    {
-        double fxn_1 = pz.f(xn_1);
-        double fxn = pz.f(xn);
-
-        // 双点弦截法：x_{n+1} = [x_{n-1} * f(x_n) - x_n * f(x_{n-1})] / [f(x_n) - f(x_{n-1})]
-        double denom = fxn - fxn_1;
-        if (std::abs(denom) < 1e-15)
-        {
-            // 分母过小，无法继续
-            tbl.rows.push_back({std::to_string(k),
-                                fmt(xn_1, 10),
-                                fmt(xn, 10),
-                                fmt(fxn_1, 10),
-                                fmt(fxn, 10),
-                                "-",
-                                "分母过小"});
-            break;
-        }
-
-        double xnext = (xn_1 * fxn - xn * fxn_1) / denom;
-        double error = std::abs(xnext - xn);
-
-        tbl.rows.push_back({std::to_string(k),
-                            fmt(xn_1, 10),
-                            fmt(xn, 10),
-                            fmt(fxn_1, 10),
-                            fmt(fxn, 10),
-                            fmt(xnext, 10),
-                            fmt(error, 10)});
-
-        xSeq.push_back(xnext);
-
-        if (error < tol || std::abs(pz.f(xnext)) < tol)
-        {
-            xn = xnext;
-            break;
-        }
-
-        xn_1 = xn;
-        xn = xnext;
-    }
-
-    std::ostringstream oss;
-    oss << "方法：双点弦截法（收敛阶数2）\n";
-    oss << "初值：x0=" << fmt(x0) << ", x1=" << fmt(x1) << " (由牛顿法计算)" << ", tol=" << tol << ", maxIter=" << maxIter << "\n";
-    oss << "迭代公式：x_{n+1} = [x_{n-1}·f(x_n) - x_n·f(x_{n-1})] / [f(x_n) - f(x_{n-1})]\n";
-    oss << "说明：x1 = x0 - f(x0)/f'(x0)，然后同时更新 x_{n-1} 和 x_n\n";
-    if (!tbl.rows.empty())
-        oss << "近似根：x≈" << fmt(xn, 12) << ", 步数：" << tbl.rows.size() << "\n";
-    else
-        oss << "未能收敛。\n";
-
-    // 绘图
-    UiOutputPane::PlotData plot;
-    if (xSeq.size() >= 2)
-    {
-        double xmin = *std::min_element(xSeq.begin(), xSeq.end());
-        double xmax = *std::max_element(xSeq.begin(), xSeq.end());
-        double root = xSeq.back();
-        double span = xmax - xmin;
-        if (span < 1e-6)
-            span = 1.0;
-        double plotXMin = root - span * 0.75;
-        double plotXMax = root + span * 0.75;
-
-        int N = 80;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = plotXMin + (plotXMax - plotXMin) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = plotXMin;
-        plot.xmax = plotXMax;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = true;
-        plot.rootX = root;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
-}
-
-void Manager::computePlot(const std::string &name)
-{
-    auto &st = states_[name];
-    // 解析输入
-    double a = toDouble(ui_.getInputValue(0), 0.0);
-    double b = toDouble(ui_.getInputValue(1), 3.0);
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-
-    // 文本摘要
-    std::ostringstream oss;
-    oss << "方法：画图法\n";
-    oss << "区间：[" << fmt(a) << ", " << fmt(b) << "]\n";
-    oss << "在此区间上绘制 f(x) 的图像\n";
-    oss << "观察曲线与 x 轴的交点即为方程的根\n";
-
-    // 绘图：在给定区间上绘制
-    UiOutputPane::PlotData plot;
-    double xa = std::min(a, b), xb = std::max(a, b);
-    if (std::isfinite(xa) && std::isfinite(xb) && xb > xa)
-    {
-        int N = 100;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = xa + (xb - xa) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = xa;
-        plot.xmax = xb;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = false; // 画图法不标记零点，让用户自己观察
-    }
-
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.table = {}; // 无表格
-    st.last.has = true;
-
-    // 直接切换到曲线标签页
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addPlotTab("曲线", st.last.plot);
-    ui_.output().setSelected(1); // 选中曲线标签页（索引1）
-}
-
-void Manager::computeScan(const std::string &name)
-{
-    auto &st = states_[name];
-    // 解析输入
-    double A = toDouble(ui_.getInputValue(0), 1.0);
-    double B = toDouble(ui_.getInputValue(1), 2.0);
-    int n = toInt(ui_.getInputValue(2), 10);
-
-    if (n <= 0)
-        n = 10;
-
-    const auto &pz = presets_.empty() ? *(new Preset()) : presets_[st.presetIndex % presets_.size()];
-
-    // 步长
-    double h = (B - A) / n;
-    double x0 = A;
-    double fx0 = pz.f(x0);
-    double lastfx = fx0;
-
-    // 扫描节点
-    std::vector<double> nodes;
-    std::vector<double> fvalues;
-    std::vector<std::pair<double, double>> intervals; // 有根子区间
-
-    nodes.push_back(x0);
-    fvalues.push_back(fx0);
-
-    for (int i = 1; i <= n; ++i)
-    {
-        double xi = x0 + i * h;
-        double fxi = pz.f(xi);
-        nodes.push_back(xi);
-        fvalues.push_back(fxi);
-
-        // 检查符号变化
-        if (lastfx * fxi < 0)
-        {
-            intervals.push_back({nodes[i - 1], xi});
-        }
-        lastfx = fxi;
-    }
-
-    // 构建表格
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"i", "xi", "f(xi)", "符号变化"};
-    for (size_t i = 0; i < nodes.size(); ++i)
-    {
-        std::string signChange = "-";
-        if (i > 0 && fvalues[i - 1] * fvalues[i] < 0)
-        {
-            signChange = "是";
-        }
-        tbl.rows.push_back({std::to_string((int)i), fmt(nodes[i], 8), fmt(fvalues[i], 8), signChange});
-    }
-
-    // 文本摘要
-    std::ostringstream oss;
-    oss << "方法：扫描法\n";
-    oss << "区间：[" << fmt(A) << ", " << fmt(B) << "]\n";
-    oss << "步长：h = " << fmt(h, 8) << ", 分段数 n = " << n << "\n";
-    oss << "找到 " << intervals.size() << " 个有根子区间：\n";
-    for (const auto &iv : intervals)
-    {
-        oss << "  [" << fmt(iv.first, 8) << ", " << fmt(iv.second, 8) << "]\n";
-    }
-    if (intervals.empty())
-    {
-        oss << "未发现符号变化，可能无根或需要更小的步长。\n";
-    }
-
-    // 绘图：在给定区间上绘制函数曲线
-    UiOutputPane::PlotData plot;
-    if (std::isfinite(A) && std::isfinite(B) && B > A)
-    {
-        int N = 100;
-        for (int i = 0; i <= N; ++i)
-        {
-            double x = A + (B - A) * (double)i / (double)N;
-            plot.xs.push_back(x);
-            plot.ys.push_back(pz.f(x));
-        }
-        plot.xlabel = "x";
-        plot.ylabel = "f(x)";
-        plot.xmin = A;
-        plot.xmax = B;
-        double ymin = 1e100, ymax = -1e100;
-        for (double yv : plot.ys)
-        {
-            ymin = std::min(ymin, yv);
-            ymax = std::max(ymax, yv);
-        }
-        if (ymin == ymax)
-        {
-            ymin -= 1;
-            ymax += 1;
-        }
-        plot.ymin = ymin;
-        plot.ymax = ymax;
-        plot.hasRoot = false;
-    }
-
-    st.last.table = std::move(tbl);
-    st.last.summary = oss.str();
-    st.last.plot = std::move(plot);
-    st.last.has = true;
 }
 
 // 工具函数
@@ -1748,1181 +1019,4 @@ void Manager::addPolynomialPreset()
         key = getch();
     } while (key == KEY_MOUSE);
     delwin(win);
-}
-
-// ==================== 矩阵相关 ====================
-
-void Manager::ensureMatrixPresets()
-{
-    if (!matrixPresets_.empty())
-        return;
-
-    // 严格对角占优预设1（迭代法必收敛）
-    {
-        calc::Matrix A(3, 3);
-        A(0, 0) = 5;
-        A(0, 1) = 2;
-        A(0, 2) = 1;
-        A(1, 0) = -1;
-        A(1, 1) = 4;
-        A(1, 2) = 2;
-        A(2, 0) = 2;
-        A(2, 1) = -3;
-        A(2, 2) = 10;
-        std::vector<double> b = {-12, 20, 3};
-        matrixPresets_.push_back({"严格对角占优1 (3x3)", A, b});
-    }
-
-    // 对角占优预设2（适合SOR测试）
-    {
-        calc::Matrix A(3, 3);
-        A(0, 0) = 4;
-        A(0, 1) = -1;
-        A(0, 2) = 0;
-        A(1, 0) = -1;
-        A(1, 1) = 4;
-        A(1, 2) = -1;
-        A(2, 0) = 0;
-        A(2, 1) = -1;
-        A(2, 2) = 4;
-        std::vector<double> b = {1, 4, -3};
-        matrixPresets_.push_back({"严格对角占优2 (3x3)", A, b});
-    }
-
-    // 通用预设1（3x3）- 不保证迭代收敛
-    {
-        calc::Matrix A(3, 3);
-        A(0, 0) = 1;
-        A(0, 1) = 1;
-        A(0, 2) = -1;
-        A(1, 0) = 1;
-        A(1, 1) = 2;
-        A(1, 2) = -2;
-        A(2, 0) = -2;
-        A(2, 1) = 1;
-        A(2, 2) = 1;
-        std::vector<double> b = {1, 0, 1};
-        matrixPresets_.push_back({"方程组1 (3x3)", A, b});
-    }
-
-    // 通用预设2（2x2）
-    {
-        calc::Matrix A(2, 2);
-        A(0, 0) = 2;
-        A(0, 1) = 1;
-        A(1, 0) = 1;
-        A(1, 1) = 3;
-        std::vector<double> b = {5, 6};
-        matrixPresets_.push_back({"方程组2 (2x2)", A, b});
-    }
-
-    // SPD 预设（用于平方根法）
-    {
-        calc::Matrix A(3, 3);
-        A(0, 0) = 4;
-        A(0, 1) = 1;
-        A(0, 2) = 1;
-        A(1, 0) = 1;
-        A(1, 1) = 3;
-        A(1, 2) = 0;
-        A(2, 0) = 1;
-        A(2, 1) = 0;
-        A(2, 2) = 2;
-        std::vector<double> b = {1, 2, 3};
-        matrixPresets_.push_back({"SPD 对称正定 (3x3)", A, b});
-    }
-
-    // 三对角预设（用于追赶法）
-    {
-        calc::Matrix A(4, 4);
-        // 主对角
-        A(0, 0) = 2;
-        A(1, 1) = 2;
-        A(2, 2) = 2;
-        A(3, 3) = 2;
-        // 上对角
-        A(0, 1) = -1;
-        A(1, 2) = -1;
-        A(2, 3) = -1;
-        // 下对角
-        A(1, 0) = -1;
-        A(2, 1) = -1;
-        A(3, 2) = -1;
-        std::vector<double> b = {1, 0, 0, 1};
-        matrixPresets_.push_back({"三对角 (4x4)", A, b});
-    }
-}
-
-void Manager::cycleMatrixPresetFor(const std::string &name, int delta)
-{
-    ensureMatrixPresets();
-    if (matrixPresets_.empty())
-        return;
-
-    auto &st = states_[name];
-    st.matrixPresetIndex = (st.matrixPresetIndex + delta + (int)matrixPresets_.size()) % (int)matrixPresets_.size();
-
-    // 加载当前预设
-    const auto &preset = matrixPresets_[st.matrixPresetIndex];
-    st.matrixA = preset.A;
-    st.vectorB = preset.b;
-
-    fillDescriptionFor(name);
-}
-
-void Manager::addMatrixPreset()
-{
-    const auto expName = ui_.getCurrentExperiment();
-    if (expName.empty())
-        return;
-
-    showMatrixInputDialog(expName, true);
-}
-
-void Manager::showMatrixInputDialog(const std::string &expName, bool createNew)
-{
-    auto &st = states_[expName];
-    int n = 3; // 默认维度
-
-    if (createNew)
-    {
-        // 创建新预设矩阵：先输入维度
-        int h = 15, w = 70;
-        int y = (LINES - h) / 2;
-        int x = (COLS - w) / 2;
-        WINDOW *win = newwin(h, w, y, x);
-        box(win, 0, 0);
-        mvwprintw(win, 1, 2, "输入线性方程组维度");
-        mvwprintw(win, 2, 2, "----------------------------------------------");
-        mvwprintw(win, 4, 2, "请输入方程个数 n (2-10): ");
-        mvwprintw(win, 6, 2, "按 q 退出");
-        wrefresh(win);
-        echo();
-        char nStr[10] = "";
-        mvwgetnstr(win, 4, 35, nStr, 9);
-        noecho();
-
-        if (nStr[0] == 'q' || nStr[0] == 'Q' || nStr[0] == '\0')
-        {
-            delwin(win);
-            return;
-        }
-
-        n = toInt(std::string(nStr), 3);
-        if (n < 2)
-            n = 2;
-        if (n > 10)
-            n = 10;
-        delwin(win);
-    }
-    else
-    {
-        // 编辑当前预设矩阵：使用预设维度
-        if (st.matrixPresetIndex >= 0 && st.matrixPresetIndex < (int)matrixPresets_.size())
-        {
-            n = matrixPresets_[st.matrixPresetIndex].A.rows();
-        }
-        else if (st.matrixA.rows() > 0)
-        {
-            n = st.matrixA.rows();
-        }
-    }
-
-    // 初始化矩阵
-    calc::Matrix A(n, n, 0.0);
-    std::vector<double> b(n, 0.0);
-
-    // 从当前预设加载数据
-    if (!createNew && st.matrixPresetIndex >= 0 && st.matrixPresetIndex < (int)matrixPresets_.size())
-    {
-        const auto &preset = matrixPresets_[st.matrixPresetIndex];
-        if (preset.A.rows() == n && preset.A.cols() == n && (int)preset.b.size() == n)
-        {
-            A = preset.A;
-            b = preset.b;
-        }
-    }
-
-    // 创建表格编辑器
-    int tableH = std::min(n + 10, LINES - 4);
-    int tableW = std::min(n * 12 + 20, COLS - 4);
-    int tableY = (LINES - tableH) / 2;
-    int tableX = (COLS - tableW) / 2;
-    WINDOW *tableWin = newwin(tableH, tableW, tableY, tableX);
-
-    int curRow = 0, curCol = 0; // 当前光标位置
-    bool editingB = false;      // 是否在编辑 b 向量
-
-    while (true)
-    {
-        wclear(tableWin);
-        box(tableWin, 0, 0);
-        mvwprintw(tableWin, 1, 2, "矩阵编辑器 (%dx%d) - 方向键移动, 回车编辑, q退出, s保存", n, n);
-        mvwprintw(tableWin, 2, 2, "----------------------------------------------------");
-
-        // 绘制表头
-        int startY = 4;
-        int startX = 4;
-        mvwprintw(tableWin, startY, startX, "    ");
-        for (int j = 0; j < n; ++j)
-        {
-            mvwprintw(tableWin, startY, startX + 4 + j * 10, "x%-2d", j + 1);
-        }
-        mvwprintw(tableWin, startY, startX + 4 + n * 10, "  b");
-
-        // 绘制矩阵
-        for (int i = 0; i < n; ++i)
-        {
-            mvwprintw(tableWin, startY + 1 + i, startX, "[%d]", i + 1);
-            for (int j = 0; j < n; ++j)
-            {
-                bool highlight = (curRow == i && curCol == j && !editingB);
-                if (highlight)
-                    wattron(tableWin, A_REVERSE);
-                mvwprintw(tableWin, startY + 1 + i, startX + 4 + j * 10, "%8.2f", A(i, j));
-                if (highlight)
-                    wattroff(tableWin, A_REVERSE);
-            }
-            // 绘制 b 向量
-            bool highlightB = (curRow == i && editingB);
-            if (highlightB)
-                wattron(tableWin, A_REVERSE);
-            mvwprintw(tableWin, startY + 1 + i, startX + 4 + n * 10, "%8.2f", b[i]);
-            if (highlightB)
-                wattroff(tableWin, A_REVERSE);
-        }
-
-        mvwprintw(tableWin, tableH - 2, 2, "提示: ↑↓←→ 移动 | 回车 编辑 | s 保存 | q 取消");
-        wrefresh(tableWin);
-
-        int ch = getch();
-        if (ch == 'q' || ch == 'Q')
-        {
-            delwin(tableWin);
-            return;
-        }
-        else if (ch == 's' || ch == 'S')
-        {
-            if (createNew)
-            {
-                // 添加新预设
-                std::string presetName = "自定义矩阵 " + std::to_string(matrixPresets_.size() + 1);
-                matrixPresets_.push_back({presetName, A, b});
-                st.matrixPresetIndex = (int)matrixPresets_.size() - 1;
-                st.matrixA = A;
-                st.vectorB = b;
-            }
-            else
-            {
-                // 更新当前预设
-                if (st.matrixPresetIndex >= 0 && st.matrixPresetIndex < (int)matrixPresets_.size())
-                {
-                    matrixPresets_[st.matrixPresetIndex].A = A;
-                    matrixPresets_[st.matrixPresetIndex].b = b;
-                    st.matrixA = A;
-                    st.vectorB = b;
-                }
-            }
-            delwin(tableWin);
-            fillDescriptionFor(expName);
-            return;
-        }
-        else if (ch == KEY_UP)
-        {
-            if (curRow > 0)
-                curRow--;
-        }
-        else if (ch == KEY_DOWN)
-        {
-            if (curRow < n - 1)
-                curRow++;
-        }
-        else if (ch == KEY_LEFT)
-        {
-            if (editingB)
-            {
-                editingB = false;
-                curCol = n - 1;
-            }
-            else if (curCol > 0)
-            {
-                curCol--;
-            }
-        }
-        else if (ch == KEY_RIGHT)
-        {
-            if (!editingB && curCol < n - 1)
-            {
-                curCol++;
-            }
-            else if (!editingB && curCol == n - 1)
-            {
-                editingB = true;
-            }
-        }
-        else if (ch == '\n' || ch == '\r' || ch == KEY_ENTER)
-        {
-            // 编辑当前单元格
-            echo();
-            char valStr[20] = "";
-            if (editingB)
-            {
-                mvwprintw(tableWin, tableH - 3, 2, "输入 b[%d] = ", curRow + 1);
-                wgetnstr(tableWin, valStr, 19);
-                if (valStr[0] != '\0')
-                    b[curRow] = toDouble(std::string(valStr), b[curRow]);
-            }
-            else
-            {
-                mvwprintw(tableWin, tableH - 3, 2, "输入 A[%d][%d] = ", curRow + 1, curCol + 1);
-                wgetnstr(tableWin, valStr, 19);
-                if (valStr[0] != '\0')
-                    A(curRow, curCol) = toDouble(std::string(valStr), A(curRow, curCol));
-            }
-            noecho();
-            mvwprintw(tableWin, tableH - 3, 2, "                                                  ");
-        }
-    }
-}
-
-void Manager::computeGaussElimination(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    // 如果没有矩阵，使用预设
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    // 调用高斯消元法
-    auto result = calc::gaussElimination(st.matrixA, st.vectorB);
-
-    // 构建摘要
-    std::ostringstream oss;
-    oss << "方法：高斯消元法（列主元）\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-        {
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-        }
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    // 构建迭代表（显示消元步骤）
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-    {
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-    }
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    // 立即显示结果到输出面板（包括L和U矩阵）
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("消元步骤", st.last.table);
-
-    // 添加L和U矩阵表格
-    if (result.success)
-    {
-        // 表格2: L矩阵（下三角，对角线为1）
-        UiOutputPane::TableData tbl2;
-        tbl2.headers.push_back("");
-        for (int j = 0; j < result.L.cols(); ++j)
-            tbl2.headers.push_back("x" + std::to_string(j + 1));
-
-        for (int i = 0; i < result.L.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.L.cols(); ++j)
-            {
-                if (j > i)
-                    row.push_back(""); // 上三角部分为0
-                else
-                    row.push_back(fmt(result.L(i, j), 6));
-            }
-            tbl2.rows.push_back(row);
-        }
-        ui_.output().addTableTab("L矩阵", tbl2);
-
-        // 表格3: U矩阵（上三角）
-        UiOutputPane::TableData tbl3;
-        tbl3.headers.push_back("");
-        for (int j = 0; j < result.U.cols(); ++j)
-            tbl3.headers.push_back("x" + std::to_string(j + 1));
-
-        for (int i = 0; i < result.U.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.U.cols(); ++j)
-            {
-                if (j < i)
-                    row.push_back(""); // 下三角部分为0
-                else
-                    row.push_back(fmt(result.U(i, j), 6));
-            }
-            tbl3.rows.push_back(row);
-        }
-        ui_.output().addTableTab("U矩阵", tbl3);
-    }
-}
-
-void Manager::computeCroutElimination(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    auto result = calc::croutElimination(st.matrixA, st.vectorB);
-
-    std::ostringstream oss;
-    oss << "方法：克劳特消元法（LU分解，u_ii = 1）\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("分解步骤", st.last.table);
-
-    if (result.success)
-    {
-        UiOutputPane::TableData tbl2;
-        tbl2.headers.push_back("");
-        for (int j = 0; j < result.L.cols(); ++j)
-            tbl2.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.L.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.L.cols(); ++j)
-                row.push_back(j > i ? "" : fmt(result.L(i, j), 6));
-            tbl2.rows.push_back(row);
-        }
-        ui_.output().addTableTab("L矩阵", tbl2);
-
-        UiOutputPane::TableData tbl3;
-        tbl3.headers.push_back("");
-        for (int j = 0; j < result.U.cols(); ++j)
-            tbl3.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.U.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.U.cols(); ++j)
-                row.push_back(j < i ? "" : fmt(result.U(i, j), 6));
-            tbl3.rows.push_back(row);
-        }
-        ui_.output().addTableTab("U矩阵", tbl3);
-    }
-}
-
-void Manager::computeCholesky(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    auto result = calc::choleskySolve(st.matrixA, st.vectorB);
-
-    std::ostringstream oss;
-    oss << "方法：平方根法（Cholesky）\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("分解步骤", st.last.table);
-
-    if (result.success)
-    {
-        // L
-        UiOutputPane::TableData tbl2;
-        tbl2.headers.push_back("");
-        for (int j = 0; j < result.L.cols(); ++j)
-            tbl2.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.L.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.L.cols(); ++j)
-                row.push_back(j > i ? "" : fmt(result.L(i, j), 6));
-            tbl2.rows.push_back(row);
-        }
-        ui_.output().addTableTab("L矩阵", tbl2);
-
-        // U = L^T
-        UiOutputPane::TableData tbl3;
-        tbl3.headers.push_back("");
-        for (int j = 0; j < result.U.cols(); ++j)
-            tbl3.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.U.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.U.cols(); ++j)
-                row.push_back(j < i ? "" : fmt(result.U(i, j), 6));
-            tbl3.rows.push_back(row);
-        }
-        ui_.output().addTableTab("U矩阵", tbl3);
-    }
-}
-
-void Manager::computeThomas(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    auto result = calc::thomasTridiagonal(st.matrixA, st.vectorB);
-
-    std::ostringstream oss;
-    oss << "方法：追赶法（Thomas）\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("步骤", st.last.table);
-}
-
-void Manager::computeColumnPivoting(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    auto result = calc::columnPivoting(st.matrixA, st.vectorB);
-
-    std::ostringstream oss;
-    oss << "方法：列主元素法\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("消元步骤", st.last.table);
-
-    if (result.success)
-    {
-        UiOutputPane::TableData tbl2;
-        tbl2.headers.push_back("");
-        for (int j = 0; j < result.L.cols(); ++j)
-            tbl2.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.L.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.L.cols(); ++j)
-                row.push_back(j > i ? "" : fmt(result.L(i, j), 6));
-            tbl2.rows.push_back(row);
-        }
-        ui_.output().addTableTab("L矩阵", tbl2);
-
-        UiOutputPane::TableData tbl3;
-        tbl3.headers.push_back("");
-        for (int j = 0; j < result.U.cols(); ++j)
-            tbl3.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.U.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.U.cols(); ++j)
-                row.push_back(j < i ? "" : fmt(result.U(i, j), 6));
-            tbl3.rows.push_back(row);
-        }
-        ui_.output().addTableTab("U矩阵", tbl3);
-    }
-}
-
-void Manager::computeJacobi(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    double tol = toDouble(ui_.getInputValue(1), 1e-6);
-    int maxIter = toInt(ui_.getInputValue(2), 100);
-
-    // 收敛性判断
-    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
-    double rhoJ = calc::jacobiSpectralRadius(st.matrixA);
-
-    int n = st.matrixA.rows();
-    std::vector<double> x0(n, 0.0);
-    auto result = calc::jacobiIteration(st.matrixA, st.vectorB, x0, maxIter, tol);
-
-    std::ostringstream oss;
-    oss << "方法：雅可比迭代法\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
-    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n\n";
-
-    oss << "收敛性分析：\n";
-    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
-    oss << "  迭代矩阵谱半径 ρ(B_J) = " << fmt(rhoJ, 8);
-    if (rhoJ < 1.0)
-        oss << " < 1（充要条件满足，必收敛）\n";
-    else
-        oss << " ≥ 1（不满足收敛条件）\n";
-    oss << "\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-        if (!result.solution.empty())
-        {
-            oss << "当前近似解：\n";
-            for (int i = 0; i < (int)result.solution.size(); ++i)
-                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-        }
-    }
-
-    // 迭代表
-    UiOutputPane::TableData tbl;
-    tbl.headers.push_back("k");
-    for (int i = 0; i < n; ++i)
-        tbl.headers.push_back("x" + std::to_string(i + 1));
-    tbl.headers.push_back("误差");
-
-    for (size_t k = 0; k < result.iterations.size(); ++k)
-    {
-        std::vector<std::string> row;
-        row.push_back(std::to_string(k));
-        for (int i = 0; i < n; ++i)
-            row.push_back(fmt(result.iterations[k][i], 8));
-        if (k > 0 && k - 1 < result.errors.size())
-            row.push_back(fmt(result.errors[k - 1], 8));
-        else
-            row.push_back("-");
-        tbl.rows.push_back(row);
-    }
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.extraTables.clear();
-
-    // 迭代矩阵
-    UiOutputPane::TableData tbl2;
-    tbl2.headers.push_back("");
-    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-        tbl2.headers.push_back("x" + std::to_string(j + 1));
-    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
-    {
-        std::vector<std::string> row;
-        row.push_back("[" + std::to_string(i + 1) + "]");
-        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-            row.push_back(fmt(result.iterationMatrix(i, j), 6));
-        tbl2.rows.push_back(row);
-    }
-    st.last.extraTables.push_back({"B_J矩阵", tbl2});
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("迭代过程", st.last.table);
-    ui_.output().addTableTab("B_J矩阵", tbl2);
-}
-
-void Manager::computeGaussSeidel(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    double tol = toDouble(ui_.getInputValue(1), 1e-6);
-    int maxIter = toInt(ui_.getInputValue(2), 100);
-
-    // 收敛性判断
-    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
-
-    int n = st.matrixA.rows();
-    std::vector<double> x0(n, 0.0);
-    auto result = calc::gaussSeidelIteration(st.matrixA, st.vectorB, x0, maxIter, tol);
-
-    std::ostringstream oss;
-    oss << "方法：高斯-赛德尔迭代法\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
-    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n\n";
-
-    oss << "收敛性分析：\n";
-    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
-    oss << "  迭代矩阵谱半径 ρ(B_GS) = " << fmt(result.spectralRadius, 8);
-    if (result.spectralRadius < 1.0)
-        oss << " < 1（充要条件满足，必收敛）\n";
-    else
-        oss << " ≥ 1（不满足收敛条件）\n";
-    oss << "\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-        if (!result.solution.empty())
-        {
-            oss << "当前近似解：\n";
-            for (int i = 0; i < (int)result.solution.size(); ++i)
-                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-        }
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers.push_back("k");
-    for (int i = 0; i < n; ++i)
-        tbl.headers.push_back("x" + std::to_string(i + 1));
-    tbl.headers.push_back("误差");
-
-    for (size_t k = 0; k < result.iterations.size(); ++k)
-    {
-        std::vector<std::string> row;
-        row.push_back(std::to_string(k));
-        for (int i = 0; i < n; ++i)
-            row.push_back(fmt(result.iterations[k][i], 8));
-        if (k > 0 && k - 1 < result.errors.size())
-            row.push_back(fmt(result.errors[k - 1], 8));
-        else
-            row.push_back("-");
-        tbl.rows.push_back(row);
-    }
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.extraTables.clear();
-
-    // 迭代矩阵
-    UiOutputPane::TableData tbl2;
-    tbl2.headers.push_back("");
-    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-        tbl2.headers.push_back("x" + std::to_string(j + 1));
-    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
-    {
-        std::vector<std::string> row;
-        row.push_back("[" + std::to_string(i + 1) + "]");
-        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-            row.push_back(fmt(result.iterationMatrix(i, j), 6));
-        tbl2.rows.push_back(row);
-    }
-    st.last.extraTables.push_back({"B_GS矩阵", tbl2});
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("迭代过程", st.last.table);
-    ui_.output().addTableTab("B_GS矩阵", tbl2);
-}
-
-void Manager::computeSOR(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    double tol = toDouble(ui_.getInputValue(1), 1e-6);
-    int maxIter = toInt(ui_.getInputValue(2), 100);
-    double omega = toDouble(ui_.getInputValue(3), 1.2);
-
-    // 收敛性判断和最优松弛因子计算
-    bool isDiagDom = calc::isStrictlyDiagonallyDominant(st.matrixA);
-    double omegaOpt = calc::optimalOmegaSOR(st.matrixA);
-
-    int n = st.matrixA.rows();
-    std::vector<double> x0(n, 0.0);
-    auto result = calc::sorIteration(st.matrixA, st.vectorB, x0, maxIter, tol, omega);
-
-    std::ostringstream oss;
-    oss << "方法：松弛迭代法（SOR）\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n";
-    oss << "精度 tol = " << tol << ", 最大迭代次数 = " << maxIter << "\n";
-    oss << "松弛因子 ω = " << fmt(omega, 4) << "\n\n";
-
-    oss << "收敛性分析：\n";
-    oss << "  严格对角占优：" << (isDiagDom ? "是（充分条件满足）" : "否") << "\n";
-    oss << "  最优松弛因子 ω_b = " << fmt(omegaOpt, 6);
-    if (std::abs(omega - omegaOpt) < 0.01)
-        oss << " （当前ω接近最优）\n";
-    else
-        oss << " （建议调整ω）\n";
-    oss << "  迭代矩阵谱半径 ρ(B_ω) = " << fmt(result.spectralRadius, 8);
-    if (result.spectralRadius < 1.0)
-        oss << " < 1（充要条件满足，必收敛）\n";
-    else
-        oss << " ≥ 1（不满足收敛条件）\n";
-    oss << "\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！迭代 " << (result.iterations.size() - 1) << " 次收敛\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-        if (!result.solution.empty())
-        {
-            oss << "当前近似解：\n";
-            for (int i = 0; i < (int)result.solution.size(); ++i)
-                oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-        }
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers.push_back("k");
-    for (int i = 0; i < n; ++i)
-        tbl.headers.push_back("x" + std::to_string(i + 1));
-    tbl.headers.push_back("误差");
-
-    for (size_t k = 0; k < result.iterations.size(); ++k)
-    {
-        std::vector<std::string> row;
-        row.push_back(std::to_string(k));
-        for (int i = 0; i < n; ++i)
-            row.push_back(fmt(result.iterations[k][i], 8));
-        if (k > 0 && k - 1 < result.errors.size())
-            row.push_back(fmt(result.errors[k - 1], 8));
-        else
-            row.push_back("-");
-        tbl.rows.push_back(row);
-    }
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.extraTables.clear();
-
-    // 迭代矩阵
-    UiOutputPane::TableData tbl2;
-    tbl2.headers.push_back("");
-    for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-        tbl2.headers.push_back("x" + std::to_string(j + 1));
-    for (int i = 0; i < result.iterationMatrix.rows(); ++i)
-    {
-        std::vector<std::string> row;
-        row.push_back("[" + std::to_string(i + 1) + "]");
-        for (int j = 0; j < result.iterationMatrix.cols(); ++j)
-            row.push_back(fmt(result.iterationMatrix(i, j), 6));
-        tbl2.rows.push_back(row);
-    }
-    st.last.extraTables.push_back({"B_ω矩阵", tbl2});
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("迭代过程", st.last.table);
-    ui_.output().addTableTab("B_ω矩阵", tbl2);
-}
-
-void Manager::computeFullPivoting(const std::string &name)
-{
-    auto &st = states_[name];
-    ensureMatrixPresets();
-
-    if (st.matrixA.rows() == 0)
-    {
-        if (!matrixPresets_.empty())
-        {
-            const auto &preset = matrixPresets_[st.matrixPresetIndex % matrixPresets_.size()];
-            st.matrixA = preset.A;
-            st.vectorB = preset.b;
-        }
-        else
-        {
-            st.last.summary = "请先输入或选择矩阵。";
-            st.last.has = true;
-            return;
-        }
-    }
-
-    auto result = calc::fullPivoting(st.matrixA, st.vectorB);
-
-    std::ostringstream oss;
-    oss << "方法：全主元素法\n";
-    oss << "方程组规模：" << st.matrixA.rows() << "x" << st.matrixA.cols() << "\n\n";
-
-    if (result.success)
-    {
-        oss << "求解成功！\n";
-        oss << "解向量：\n";
-        for (int i = 0; i < (int)result.solution.size(); ++i)
-            oss << "  x" << (i + 1) << " = " << fmt(result.solution[i], 10) << "\n";
-    }
-    else
-    {
-        oss << "求解失败：" << result.errorMsg << "\n";
-    }
-
-    UiOutputPane::TableData tbl;
-    tbl.headers = {"步骤", "操作"};
-    for (size_t i = 0; i < result.stepDesc.size(); ++i)
-        tbl.rows.push_back({std::to_string(i), result.stepDesc[i]});
-
-    st.last.summary = oss.str();
-    st.last.table = std::move(tbl);
-    st.last.plot = {};
-    st.last.has = true;
-
-    ui_.output().clear();
-    ui_.output().addTextTab("摘要", st.last.summary);
-    ui_.output().addTableTab("消元步骤", st.last.table);
-
-    if (result.success)
-    {
-        UiOutputPane::TableData tbl2;
-        tbl2.headers.push_back("");
-        for (int j = 0; j < result.L.cols(); ++j)
-            tbl2.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.L.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.L.cols(); ++j)
-                row.push_back(j > i ? "" : fmt(result.L(i, j), 6));
-            tbl2.rows.push_back(row);
-        }
-        ui_.output().addTableTab("L矩阵", tbl2);
-
-        UiOutputPane::TableData tbl3;
-        tbl3.headers.push_back("");
-        for (int j = 0; j < result.U.cols(); ++j)
-            tbl3.headers.push_back("x" + std::to_string(j + 1));
-        for (int i = 0; i < result.U.rows(); ++i)
-        {
-            std::vector<std::string> row;
-            row.push_back("[" + std::to_string(i + 1) + "]");
-            for (int j = 0; j < result.U.cols(); ++j)
-                row.push_back(j < i ? "" : fmt(result.U(i, j), 6));
-            tbl3.rows.push_back(row);
-        }
-        ui_.output().addTableTab("U矩阵", tbl3);
-    }
 }

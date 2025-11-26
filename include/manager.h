@@ -14,6 +14,7 @@
 // - UI 负责展示与事件；
 // - Manager 负责根据当前实验设置 UI 的说明与输入、保存/加载数据，并在提交后调用 calc 进行计算并填充输出；
 // - calc 只做纯算法计算。
+
 class Manager
 {
 public:
@@ -47,12 +48,18 @@ private:
         calc::Matrix matrixA;        // 系数矩阵
         std::vector<double> vectorB; // 右端向量
         int matrixPresetIndex = 0;   // 矩阵预设索引
+
+        // 插值法相关
+        calc::Matrix valueTable;       // 函数值表（x, f(x), f'(x), ...）
+        int valueTablePresetIndex = 0; // 函数值表预设索引
     };
 
     // 内部工具
     void bindUiCallbacks();
     void ensureDefaultsFor(const std::string &name);
     void fillDescriptionFor(const std::string &name);
+
+    // 数值计算方法，实现于compute.cpp
     void computePlot(const std::string &name);
     void computeScan(const std::string &name);
     void computeBisection(const std::string &name);
@@ -70,14 +77,26 @@ private:
     void computeJacobi(const std::string &name);
     void computeGaussSeidel(const std::string &name);
     void computeSOR(const std::string &name);
+    void computeDividedDifference(const std::string &name);
+    void computeNewtonDividedDiff(const std::string &name); 
+    void computeNewtonEqualDiff(const std::string &name);   
+    void computeLagrange(const std::string &name); 
+    
+    // 预设相关
     void ensurePresets();
     void cyclePresetFor(const std::string &name, int delta);
 
-    // 矩阵相关
+    // 矩阵预设相关，实现于MatrixPresets.cpp
     void ensureMatrixPresets();
     void showMatrixInputDialog(const std::string &expName, bool createNew);
     void cycleMatrixPresetFor(const std::string &name, int delta);
     void addMatrixPreset();
+
+    // 函数值表预设相关，实现于ValueTablePresets.cpp
+    void ensureValueTablePresets();
+    void showValueTableInputDialog(const std::string &expName, bool createNew);
+    void cycleValueTablePresetFor(const std::string &name, int delta);
+    void addValueTablePreset();
 
     // 解析与格式化
     static double toDouble(const std::string &s, double defv);
@@ -104,6 +123,14 @@ private:
         std::vector<double> b;
     };
     std::vector<MatrixPreset> matrixPresets_;
+
+    // 函数值表预设
+    struct ValueTablePreset
+    {
+        std::string name;
+        calc::Matrix table; // 列：x, f(x), f'(x), f''(x), ...
+    };
+    std::vector<ValueTablePreset> valueTablePresets_;
 };
 
 #endif // MANAGER_H

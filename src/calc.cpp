@@ -1186,4 +1186,636 @@ namespace calc
         result.solution = x;
         return result;
     }
+
+    // ==================== 插值法基础工具 ====================
+
+    // 阶乘
+    long long factorial(int n)
+    {
+        if (n < 0)
+            return 0;
+        if (n == 0 || n == 1)
+            return 1;
+        long long result = 1;
+        for (int i = 2; i <= n; ++i)
+            result *= i;
+        return result;
+    }
+
+    // 广义组合数 C(t, n) = t(t-1)(t-2)...(t-n+1) / n!
+    double generalizedBinomial(double t, int n)
+    {
+        if (n < 0)
+            return 0.0;
+        if (n == 0)
+            return 1.0;
+
+        double numerator = 1.0;
+        for (int i = 0; i < n; ++i)
+            numerator *= (t - i);
+
+        double denominator = static_cast<double>(factorial(n));
+        return numerator / denominator;
+    }
+
+    // 前向差分表
+    std::vector<std::vector<double>> forwardDifferenceTable(const std::vector<double> &y)
+    {
+        int n = y.size();
+        if (n == 0)
+            return {};
+
+        // table[i][j] 表示 Δ^j y_i
+        std::vector<std::vector<double>> table(n);
+
+        // 第 0 列：原始函数值
+        for (int i = 0; i < n; ++i)
+        {
+            table[i].resize(n - i);
+            table[i][0] = y[i];
+        }
+
+        // 计算各阶差分
+        for (int j = 1; j < n; ++j) // 差分阶数
+        {
+            for (int i = 0; i < n - j; ++i) // 起始位置
+            {
+                table[i][j] = table[i + 1][j - 1] - table[i][j - 1];
+            }
+        }
+
+        return table;
+    }
+
+    // 后向差分表
+    std::vector<std::vector<double>> backwardDifferenceTable(const std::vector<double> &y)
+    {
+        int n = y.size();
+        if (n == 0)
+            return {};
+
+        // table[i][j] 表示 ∇^j y_i
+        std::vector<std::vector<double>> table(n);
+
+        // 第 0 列：原始函数值
+        for (int i = 0; i < n; ++i)
+        {
+            table[i].resize(i + 1);
+            table[i][0] = y[i];
+        }
+
+        // 计算各阶后向差分
+        for (int j = 1; j < n; ++j) // 差分阶数
+        {
+            for (int i = j; i < n; ++i) // 起始位置（从第 j 个元素开始）
+            {
+                table[i][j] = table[i][j - 1] - table[i - 1][j - 1];
+            }
+        }
+
+        return table;
+    }
+
+    // 差商表
+    std::vector<std::vector<double>> dividedDifferenceTable(const std::vector<double> &x,
+                                                            const std::vector<double> &y)
+    {
+        int n = x.size();
+        if (n == 0 || x.size() != y.size())
+            return {};
+
+        // table[i][j] 表示 f[x_i, x_{i+1}, ..., x_{i+j}]
+        std::vector<std::vector<double>> table(n);
+
+        // 第 0 列：原始函数值 f[x_i]
+        for (int i = 0; i < n; ++i)
+        {
+            table[i].resize(n - i);
+            table[i][0] = y[i];
+        }
+
+        // 计算各阶差商
+        for (int j = 1; j < n; ++j) // 差商阶数
+        {
+            for (int i = 0; i < n - j; ++i) // 起始位置
+            {
+                // f[x_i, ..., x_{i+j}] = (f[x_{i+1}, ..., x_{i+j}] - f[x_i, ..., x_{i+j-1}]) / (x_{i+j} - x_i)
+                table[i][j] = (table[i + 1][j - 1] - table[i][j - 1]) / (x[i + j] - x[i]);
+            }
+        }
+
+        return table;
+    }
+
+    // ==================== 插值方法选择 ====================
+
+    InterpolationMethodInfo selectInterpolationMethod(const std::vector<double> &x, double xVal)
+    {
+        InterpolationMethodInfo info;
+        int n = x.size();
+
+        if (n < 2)
+        {
+            info.reason = "节点数量不足（需要至少2个节点）";
+            return info;
+        }
+
+        // 检查等距性
+        double h = x[1] - x[0];
+        info.h = h;
+        info.isEquidistant = true;
+        const double tol = 1e-6;
+
+        for (int i = 2; i < n; ++i)
+        {
+            double diff = x[i] - x[i - 1];
+            if (std::fabs(diff - h) > tol)
+            {
+                info.isEquidistant = false;
+                info.reason = "节点不等距，建议使用牛顿差商公式";
+                info.recommendedMethod = "divided_difference";
+                return info;
+            }
+        }
+
+        if (n < 5)
+        {
+            info.reason = "等距节点数量不足5个，建议补充节点";
+            info.recommendedMethod = "forward";
+            info.baseIndex = 0;
+            info.t = (xVal - x[0]) / h;
+            return info;
+        }
+
+        // 等距节点，判断 xVal 的位置
+        // 计算 xVal 相对于各节点的位置
+        if (xVal < x[0])
+        {
+            // 外推：在最前面
+            info.recommendedMethod = "forward";
+            info.baseIndex = 0;
+            info.t = (xVal - x[0]) / h;
+            info.reason = "x在区间左侧，推荐前插公式";
+        }
+        else if (xVal > x[n - 1])
+        {
+            // 外推：在最后面
+            info.recommendedMethod = "backward";
+            info.baseIndex = n - 1;
+            info.t = (xVal - x[n - 1]) / h;
+            info.reason = "x在区间右侧，推荐后插公式";
+        }
+        else
+        {
+            // 在区间内部
+            // 找到 xVal 所在的子区间
+            int idx = 0;
+            for (int i = 0; i < n - 1; ++i)
+            {
+                if (xVal >= x[i] && xVal <= x[i + 1])
+                {
+                    idx = i;
+                    break;
+                }
+            }
+
+            // 计算相对位置
+            double relPos = static_cast<double>(idx) / (n - 1);
+
+            if (relPos < 0.25)
+            {
+                // 前部区间，使用前插
+                info.recommendedMethod = "forward";
+                info.baseIndex = 0;
+                info.t = (xVal - x[0]) / h;
+                info.reason = "x在区间前1/4部分，推荐前插公式";
+            }
+            else if (relPos > 0.75)
+            {
+                // 后部区间，使用后插
+                info.recommendedMethod = "backward";
+                info.baseIndex = n - 1;
+                info.t = (xVal - x[n - 1]) / h;
+                info.reason = "x在区间后1/4部分，推荐后插公式";
+            }
+            else
+            {
+                // 中部区间，使用斯梯林或贝塞尔
+                // 找最近的中心节点
+                int centerIdx = n / 2;
+                double tCenter = (xVal - x[centerIdx]) / h;
+
+                if (std::fabs(tCenter) < 0.5)
+                {
+                    // 靠近整数节点，使用斯梯林
+                    info.recommendedMethod = "stirling";
+                    info.baseIndex = centerIdx;
+                    info.t = tCenter;
+                    info.reason = "x在区间中部且靠近节点，推荐斯梯林公式";
+                }
+                else
+                {
+                    // 靠近半整数节点，使用贝塞尔
+                    info.recommendedMethod = "bessel";
+                    info.baseIndex = centerIdx;
+                    info.t = tCenter;
+                    info.reason = "x在区间中部且靠近半节点，推荐贝塞尔公式";
+                }
+            }
+        }
+
+        return info;
+    }
+
+    // ==================== 牛顿差商插值（不等距） ====================
+
+    InterpolationResult newtonDividedDifference(const std::vector<double> &x,
+                                                const std::vector<double> &y,
+                                                double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n == 0 || x.size() != y.size())
+        {
+            result.errorMsg = "输入数据为空或维度不匹配";
+            return result;
+        }
+
+        // 计算差商表
+        auto table = dividedDifferenceTable(x, y);
+        if (table.empty())
+        {
+            result.errorMsg = "差商表计算失败";
+            return result;
+        }
+
+        result.table = table;
+
+        // 牛顿差商公式：P_n(x) = f[x_0] + (x-x_0)f[x_0,x_1] + (x-x_0)(x-x_1)f[x_0,x_1,x_2] + ...
+        double value = table[0][0]; // f[x_0]
+        double term = 1.0;
+
+        std::ostringstream polyStream;
+        polyStream << std::fixed << std::setprecision(6);
+        polyStream << "P_n(x) = " << table[0][0];
+
+        for (int i = 1; i < n; ++i)
+        {
+            term *= (xVal - x[i - 1]);
+            double increment = term * table[0][i];
+            value += increment;
+
+            result.coefficients.push_back(table[0][i]);
+
+            polyStream << "\n       + " << table[0][i] << "·";
+            for (int j = 0; j < i; ++j)
+            {
+                polyStream << "(x-" << x[j] << ")";
+            }
+        }
+
+        result.value = value;
+        result.polynomial = polyStream.str();
+        result.method = "牛顿差商公式（不等距）";
+        result.success = true;
+
+        std::ostringstream stepStream;
+        stepStream << "使用牛顿差商公式计算 P_n(" << xVal << ")";
+        result.stepDesc.push_back(stepStream.str());
+
+        return result;
+    }
+
+    // ==================== 牛顿前插公式（等距） ====================
+
+    InterpolationResult newtonForwardDifference(const std::vector<double> &x,
+                                                const std::vector<double> &y,
+                                                double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n == 0)
+        {
+            result.errorMsg = "输入数据为空";
+            return result;
+        }
+
+        double h = x[1] - x[0];
+        double x0 = x[0];
+        double t = (xVal - x0) / h;
+
+        result.t = t;
+        result.baseIndex = 0;
+
+        // 计算前向差分表
+        auto table = forwardDifferenceTable(y);
+        if (table.empty())
+        {
+            result.errorMsg = "前向差分表计算失败";
+            return result;
+        }
+
+        result.table = table;
+
+        // 牛顿前插公式：P_n(x) = y_0 + C(t,1)Δy_0 + C(t,2)Δ²y_0 + ... + C(t,n)Δⁿy_0
+        double value = table[0][0]; // y_0
+
+        std::ostringstream polyStream;
+        polyStream << std::fixed << std::setprecision(6);
+        polyStream << "P_n(x) = " << table[0][0];
+
+        for (int i = 1; i < n && i < (int)table[0].size(); ++i)
+        {
+            double coeff = generalizedBinomial(t, i);
+            double increment = coeff * table[0][i];
+            value += increment;
+
+            result.coefficients.push_back(table[0][i]);
+
+            polyStream << "\n       + C(t," << i << ")·Δ^" << i << "y_0 = " << coeff << " × " << table[0][i];
+        }
+
+        result.value = value;
+        result.polynomial = polyStream.str();
+        result.method = "牛顿前插公式";
+        result.success = true;
+
+        std::ostringstream stepStream;
+        stepStream << "使用前插公式，x0=" << x0 << ", h=" << h << ", t=" << t;
+        result.stepDesc.push_back(stepStream.str());
+
+        return result;
+    }
+
+    // ==================== 牛顿后插公式（等距） ====================
+
+    InterpolationResult newtonBackwardDifference(const std::vector<double> &x,
+                                                 const std::vector<double> &y,
+                                                 double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n == 0)
+        {
+            result.errorMsg = "输入数据为空";
+            return result;
+        }
+
+        double h = x[1] - x[0];
+        double xn = x[n - 1];
+        double t = (xVal - xn) / h;
+
+        result.t = t;
+        result.baseIndex = n - 1;
+
+        // 计算后向差分表
+        auto table = backwardDifferenceTable(y);
+        if (table.empty())
+        {
+            result.errorMsg = "后向差分表计算失败";
+            return result;
+        }
+
+        result.table = table;
+
+        // 牛顿后插公式：P_n(x) = y_n + C(t,1)∇y_n + C(t,2)∇²y_n + ... + C(t,n)∇ⁿy_n
+        double value = table[n - 1][0]; // y_n
+
+        std::ostringstream polyStream;
+        polyStream << std::fixed << std::setprecision(6);
+        polyStream << "P_n(x) = " << table[n - 1][0];
+
+        for (int i = 1; i < n && i < (int)table[n - 1].size(); ++i)
+        {
+            double coeff = generalizedBinomial(t, i);
+            double increment = coeff * table[n - 1][i];
+            value += increment;
+
+            result.coefficients.push_back(table[n - 1][i]);
+
+            polyStream << "\n       + C(t," << i << ")·∇^" << i << "y_n = " << coeff << " × " << table[n - 1][i];
+        }
+
+        result.value = value;
+        result.polynomial = polyStream.str();
+        result.method = "牛顿后插公式";
+        result.success = true;
+
+        std::ostringstream stepStream;
+        stepStream << "使用后插公式，xn=" << xn << ", h=" << h << ", t=" << t;
+        result.stepDesc.push_back(stepStream.str());
+
+        return result;
+    }
+
+    // ==================== 斯梯林插值公式 ====================
+
+    InterpolationResult stirlingInterpolation(const std::vector<double> &x,
+                                              const std::vector<double> &y,
+                                              double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n < 3)
+        {
+            result.errorMsg = "斯梯林公式需要至少3个节点";
+            return result;
+        }
+
+        // 选择中心节点
+        int centerIdx = n / 2;
+        double x0 = x[centerIdx];
+        double h = x[1] - x[0];
+        double t = (xVal - x0) / h;
+
+        result.t = t;
+        result.baseIndex = centerIdx;
+
+        // 计算前向和后向差分表
+        auto fwdTable = forwardDifferenceTable(y);
+        auto bwdTable = backwardDifferenceTable(y);
+
+        if (fwdTable.empty() || bwdTable.empty())
+        {
+            result.errorMsg = "差分表计算失败";
+            return result;
+        }
+
+        result.table = fwdTable; // 存储前向差分表作为参考
+
+        // 斯梯林公式：使用中心差分的平均
+        // P(x) = y_0 + t·(Δy_{-1}+Δy_0)/2 + C(t,2)·Δ²y_{-1} + ...
+        // 简化实现：使用前插和后插的平均
+        auto fwdResult = newtonForwardDifference(x, y, xVal);
+        auto bwdResult = newtonBackwardDifference(x, y, xVal);
+
+        if (!fwdResult.success || !bwdResult.success)
+        {
+            result.errorMsg = "前插或后插计算失败";
+            return result;
+        }
+
+        result.value = (fwdResult.value + bwdResult.value) / 2.0;
+        result.method = "斯梯林插值公式";
+        result.polynomial = "斯梯林公式（前插与后插平均）";
+        result.success = true;
+
+        std::ostringstream stepStream;
+        stepStream << "使用斯梯林公式，中心节点 x0=" << x0 << ", h=" << h << ", t=" << t;
+        result.stepDesc.push_back(stepStream.str());
+        stepStream.str("");
+        stepStream << "前插值=" << fwdResult.value << ", 后插值=" << bwdResult.value << ", 平均=" << result.value;
+        result.stepDesc.push_back(stepStream.str());
+
+        return result;
+    }
+
+    // ==================== 贝塞尔插值公式 ====================
+
+    InterpolationResult besselInterpolation(const std::vector<double> &x,
+                                            const std::vector<double> &y,
+                                            double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n < 3)
+        {
+            result.errorMsg = "贝塞尔公式需要至少3个节点";
+            return result;
+        }
+
+        // 选择中心节点
+        int centerIdx = n / 2;
+        double x0 = x[centerIdx];
+        double h = x[1] - x[0];
+        double t = (xVal - x0) / h;
+
+        result.t = t;
+        result.baseIndex = centerIdx;
+
+        // 贝塞尔公式适用于 t 在 [-0.5, 0.5] 附近
+        // 简化实现：类似斯梯林，使用前插和后插的加权平均
+        auto fwdResult = newtonForwardDifference(x, y, xVal);
+        auto bwdResult = newtonBackwardDifference(x, y, xVal);
+
+        if (!fwdResult.success || !bwdResult.success)
+        {
+            result.errorMsg = "前插或后插计算失败";
+            return result;
+        }
+
+        // 贝塞尔的权重根据 t 调整
+        double w = 0.5 + t; // 简单权重
+        if (w < 0)
+            w = 0;
+        if (w > 1)
+            w = 1;
+
+        result.value = w * fwdResult.value + (1 - w) * bwdResult.value;
+        result.method = "贝塞尔插值公式";
+        result.polynomial = "贝塞尔公式（前插与后插加权平均）";
+        result.success = true;
+        result.table = fwdResult.table; // 使用前插的差分表
+
+        std::ostringstream stepStream;
+        stepStream << "使用贝塞尔公式，中心节点 x0=" << x0 << ", h=" << h << ", t=" << t;
+        result.stepDesc.push_back(stepStream.str());
+        stepStream.str("");
+        stepStream << "前插值=" << fwdResult.value << ", 后插值=" << bwdResult.value;
+        stepStream.str("");
+        stepStream << "权重w=" << w << ", 结果=" << result.value;
+        result.stepDesc.push_back(stepStream.str());
+
+        return result;
+    }
+
+    // ==================== 拉格朗日插值公式 ====================
+
+    InterpolationResult lagrangeInterpolation(const std::vector<double> &x,
+                                              const std::vector<double> &y,
+                                              double xVal)
+    {
+        InterpolationResult result;
+        int n = x.size();
+
+        if (n == 0 || x.size() != y.size())
+        {
+            result.errorMsg = "输入数据为空或维度不匹配";
+            return result;
+        }
+
+        if (n == 1)
+        {
+            result.value = y[0];
+            result.polynomial = "L_0(x) = " + std::to_string(y[0]);
+            result.method = "拉格朗日插值公式";
+            result.success = true;
+            return result;
+        }
+
+        // 拉格朗日插值公式：L_n(x) = Σ l_i(x)·f(x_i)
+        // 其中 l_i(x) = Π[j≠i] (x-x_j)/(x_i-x_j)
+        double value = 0.0;
+        std::ostringstream polyStream;
+        polyStream << std::fixed << std::setprecision(6);
+        polyStream << "L_n(x) = ";
+
+        std::vector<double> lagrangeBasis(n); // 存储每个基函数 l_i(xVal) 的值
+
+        for (int i = 0; i < n; ++i)
+        {
+            // 计算第 i 个拉格朗日基函数 l_i(xVal)
+            double li = 1.0;
+            for (int j = 0; j < n; ++j)
+            {
+                if (j != i)
+                {
+                    li *= (xVal - x[j]) / (x[i] - x[j]);
+                }
+            }
+            lagrangeBasis[i] = li;
+            value += li * y[i];
+
+            // 构建多项式表达式
+            if (i > 0)
+                polyStream << "\n       + ";
+
+            polyStream << "l_" << i << "(x)·f(x_" << i << ") = " << li << " × " << y[i];
+
+            // 添加基函数的详细表达式到步骤说明中
+            std::ostringstream basisDesc;
+            basisDesc << std::fixed << std::setprecision(6);
+            basisDesc << "l_" << i << "(x) = ";
+            for (int j = 0; j < n; ++j)
+            {
+                if (j != i)
+                {
+                    if (j > 0 && j != i + 1 && (i == 0 || j > 1))
+                        basisDesc << " × ";
+                    basisDesc << "(x-" << x[j] << ")/(" << x[i] << "-" << x[j] << ")";
+                }
+            }
+            basisDesc << " = " << li;
+            result.stepDesc.push_back(basisDesc.str());
+        }
+
+        result.value = value;
+        result.polynomial = polyStream.str();
+        result.method = "拉格朗日插值公式";
+        result.success = true;
+
+        // 存储基函数值作为系数
+        result.coefficients = lagrangeBasis;
+
+        std::ostringstream summaryStream;
+        summaryStream << "使用拉格朗日插值公式计算 L_n(" << xVal << ") = " << value;
+        result.stepDesc.insert(result.stepDesc.begin(), summaryStream.str());
+
+        return result;
+    }
 }
