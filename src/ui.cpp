@@ -48,6 +48,7 @@ void UiOutputPane::clear()
     tabs_.clear();
     selected_ = 0;
     tableScroll_ = 0;
+    textScroll_ = 0;
 }
 
 void UiOutputPane::setSelected(int idx)
@@ -56,6 +57,7 @@ void UiOutputPane::setSelected(int idx)
     {
         selected_ = idx;
         tableScroll_ = 0; // 切换标签页时重置滚动
+        textScroll_ = 0;
     }
 }
 
@@ -203,8 +205,8 @@ void UI::buildExperimentTree()
     auto ch2 = ExperimentNode{"第二章 方程(组)的迭代解法", true, false, {{"1.1 画图法", false, false, {}}, {"1.2 对分法", false, false, {}}, {"1.3 扫描法", false, false, {}}, {"2.1 埃特肯法", false, false, {}}, {"2.2.1 牛顿迭代法", false, false, {}}, {"2.2.2 牛顿下山法", false, false, {}}, {"2.3.1 单点弦截法", false, false, {}}, {"2.3.2 双点弦截法", false, false, {}}}};
     auto ch3 = ExperimentNode{"第三章 解线性方程组的直接法", true, false, {{"1.1 高斯消元法", false, false, {}}, {"1.2 克劳特消元法", false, false, {}}, {"2. 平方根法", false, false, {}}, {"3. （追赶法）", false, false, {}}, {"4.1 列主元素法", false, false, {}}, {"4.2 全主元素法", false, false, {}}}};
     auto ch4 = ExperimentNode{"第四章 解线性方程组的迭代法", true, false, {{"1. 雅可比迭代法", false, false, {}}, {"2. 高斯-赛德尔迭代法", false, false, {}}, {"3. 松弛迭代法", false, false, {}}}};
-    auto ch5 = ExperimentNode{"第五章 插值法", true, false, {{"1. 差商/差分", false, false, {}}, {"2. 不等距牛顿差商", false, false, {}}, {"3. 等距牛顿差分", false, false, {}}, {"4. 拉格朗日插值", false, false, {}}, {"5. 反插值", false, false, {}}, {"6. 埃尔米特插值", false, false, {}}}};
-    auto ch6 = ExperimentNode{"第六章 数值积分", true, false, {{"1. 牛顿-科特斯/复化", false, false, {}}, {"2. 复合梯形/辛普森", false, false, {}}, {"3. 龙贝格法", false, false, {}}, {"4. 高斯求积", false, false, {}}}};
+    auto ch5 = ExperimentNode{"第五章 插值法", true, false, {{"1. 差商/差分", false, false, {}}, {"2. 不等距牛顿差商", false, false, {}}, {"3. 等距牛顿差分", false, false, {}}, {"4. 拉格朗日插值", false, false, {}}, {"5. 简单反插值", false, false, {}}, {"6. 埃尔米特插值", false, false, {}}}};
+    auto ch6 = ExperimentNode{"第六章 数值积分（暂未实现）", true, false, {{"1. 牛顿-科特斯/复化", false, false, {}}, {"2. 复合梯形/辛普森", false, false, {}}, {"3. 龙贝格法", false, false, {}}, {"4. 高斯求积", false, false, {}}}};
     tree_.push_back(ch2);
     tree_.push_back(ch3);
     tree_.push_back(ch4);
@@ -557,16 +559,41 @@ void UI::loopExperiment()
                 }
                 else if (t.type == UiOutputPane::TabType::Text)
                 {
-                    // 简单多行文本
+                    // 简单多行文本（带滚动）
+                    std::vector<std::string> lines;
                     std::istringstream iss(t.text);
                     std::string line;
-                    int row = 0;
-                    while (std::getline(iss, line) && row < contentH)
+                    while (std::getline(iss, line))
                     {
-                        if ((int)line.size() > contentW - 1)
-                            line.resize(contentW - 1);
-                        mvprintw(contentY + row, leftX, "%s", line.c_str());
-                        ++row;
+                        lines.push_back(line);
+                    }
+
+                    int totalLines = (int)lines.size();
+                    int visibleLines = std::max(1, contentH - 1); // 留一行显示滚动提示
+                    int scroll = output_.textScroll();
+                    scroll = std::clamp(scroll, 0, std::max(0, totalLines - visibleLines));
+                    output_.setTextScroll(scroll);
+
+                    // 显示可见行
+                    for (int i = 0; i < visibleLines && (scroll + i) < totalLines; ++i)
+                    {
+                        std::string displayLine = lines[scroll + i];
+                        if ((int)displayLine.size() > contentW - 1)
+                            displayLine.resize(contentW - 1);
+                        mvprintw(contentY + i, leftX, "%s", displayLine.c_str());
+                    }
+
+                    // 显示滚动提示
+                    if (totalLines > visibleLines)
+                    {
+                        int lastRow = contentY + std::min(visibleLines, contentH - 1);
+                        int endLine = std::min(scroll + visibleLines, totalLines);
+                        std::string hint = "(第" + std::to_string(scroll + 1) + "-" +
+                                           std::to_string(endLine) + "行, 共" +
+                                           std::to_string(totalLines) + "行)";
+                        attron(A_DIM);
+                        mvprintw(lastRow, leftX, "%s", hint.c_str());
+                        attroff(A_DIM);
                     }
                 }
                 else if (t.type == UiOutputPane::TabType::Table)
@@ -1089,6 +1116,27 @@ void UI::loopExperiment()
                         else
                             scroll = std::min(std::max(0, totalRows - visibleRows), scroll + 1);
                         output_.setTableScroll(scroll);
+                    }
+                    else if (tab.type == UiOutputPane::TabType::Text)
+                    {
+                        // 文本标签页滚动
+                        std::vector<std::string> lines;
+                        std::istringstream iss(tab.text);
+                        std::string line;
+                        while (std::getline(iss, line))
+                        {
+                            lines.push_back(line);
+                        }
+
+                        int scroll = output_.textScroll();
+                        int totalLines = (int)lines.size();
+                        int contentH = h - (outTop + 4) - 3;
+                        int visibleLines = std::max(1, contentH - 1);
+                        if (ch == KEY_UP)
+                            scroll = std::max(0, scroll - 1);
+                        else
+                            scroll = std::min(std::max(0, totalLines - visibleLines), scroll + 1);
+                        output_.setTextScroll(scroll);
                     }
                 }
             }

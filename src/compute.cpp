@@ -2053,7 +2053,7 @@ void Manager::computeNewtonDividedDiff(const std::string &expName)
             if (j == 0)
                 hdr << "f[x_i]";
             else
-                hdr << "f[..+" << j << "]";
+                hdr << "k=" << j;
             tableData.headers.push_back(hdr.str());
         }
 
@@ -2073,15 +2073,75 @@ void Manager::computeNewtonDividedDiff(const std::string &expName)
             }
             tableData.rows.push_back(row);
         }
+
+        if (result.table.size() > 20)
+        {
+            tableData.rows.push_back({"...", "...", "...", "提示：共 " + std::to_string(result.table.size()) + " 行"});
+        }
+
         ui_.output().addTableTab("差商表", tableData);
     }
 
-    // 输出插值多项式
-    if (!result.polynomial.empty())
+    // 输出插值多项式 - 分项换行
+    if (!result.polynomial.empty() && !result.coefficients.empty())
     {
         std::ostringstream poly;
-        poly << "插值多项式：\n";
-        poly << result.polynomial << "\n";
+        poly << std::fixed << std::setprecision(8);
+        poly << "牛顿差商插值多项式\n";
+        poly << "════════════════════════════════════════════════════════\n\n";
+        poly << "P_n(x) = f[x0] + f[x0,x1](x-x0) + f[x0,x1,x2](x-x0)(x-x1) + ...\n\n";
+
+        poly << "展开形式（按项）：\n\n";
+        int maxTerms = std::min(10, (int)result.coefficients.size());
+
+        for (int k = 0; k < maxTerms; ++k)
+        {
+            if (k == 0)
+            {
+                poly << "  P(x) = " << std::setw(14) << result.coefficients[0];
+            }
+            else
+            {
+                poly << "       ";
+                if (result.coefficients[k] >= 0)
+                    poly << " + ";
+                else
+                    poly << " - ";
+
+                poly << std::setw(14) << std::abs(result.coefficients[k]);
+
+                // 显示基函数
+                poly << " * ";
+                for (int j = 0; j < k && j < 4; ++j)
+                {
+                    if (j > 0)
+                        poly << "";
+                    poly << "(x-" << fmt(x_data[j], 6) << ")";
+                }
+                if (k > 4)
+                    poly << "...";
+            }
+            poly << "\n";
+        }
+
+        if ((int)result.coefficients.size() > maxTerms)
+            poly << "       + ... (共 " << result.coefficients.size() << " 项)\n";
+
+        poly << "\n差商系数：\n";
+        for (int i = 0; i < (int)result.coefficients.size() && i < 12; ++i)
+        {
+            poly << "  f[x0";
+            if (i > 0)
+            {
+                poly << ",...,x" << i;
+            }
+            poly << "] = " << std::setw(16) << std::setprecision(10)
+                 << result.coefficients[i] << "\n";
+        }
+        if ((int)result.coefficients.size() > 12)
+            poly << "  ... (共 " << result.coefficients.size() << " 个系数)\n";
+
+        poly << "\n提示：按 Tab 键可切换到其他标签页\n";
         ui_.output().addTextTab("多项式", poly.str());
     }
 
@@ -2545,7 +2605,7 @@ void Manager::computeLagrange(const std::string &expName)
         tableData.headers.push_back("l_i(x)");
         tableData.headers.push_back("l_i(x)·f(x_i)");
 
-        for (size_t i = 0; i < x_data.size(); ++i)
+        for (size_t i = 0; i < x_data.size() && i < 20; ++i)
         {
             std::vector<std::string> row;
             row.push_back(std::to_string(i));
@@ -2556,25 +2616,84 @@ void Manager::computeLagrange(const std::string &expName)
             tableData.rows.push_back(row);
         }
 
+        if (x_data.size() > 20)
+        {
+            tableData.rows.push_back({"...", "...", "...", "...", "提示：共 " + std::to_string(x_data.size()) + " 个节点"});
+        }
+
         ui_.output().addTableTab("基函数值", tableData);
     }
 
     if (!result.polynomial.empty())
     {
         std::ostringstream poly;
-        poly << "插值多项式：\n";
-        poly << result.polynomial << "\n";
+        poly << std::fixed << std::setprecision(8);
+        poly << "拉格朗日插值多项式\n";
+        poly << "════════════════════════════════════════════════════════\n\n";
+        poly << "L_n(x) = SUM l_i(x)*f(x_i)\n";
+        poly << "其中 l_i(x) = PROD_{j!=i} (x-x_j)/(x_i-x_j)\n\n";
+
+        poly << "在 x = " << fmt(xVal, 8) << " 处各项贡献：\n\n";
+        int maxTerms = std::min(10, (int)result.coefficients.size());
+
+        double sum = 0.0;
+        for (int i = 0; i < maxTerms; ++i)
+        {
+            double term = result.coefficients[i] * y_data[i];
+            sum += term;
+
+            if (i == 0)
+            {
+                poly << "  L(x) = " << std::setw(14) << term;
+            }
+            else
+            {
+                poly << "       ";
+                if (term >= 0)
+                    poly << " + ";
+                else
+                    poly << " - ";
+                poly << std::setw(14) << std::abs(term);
+            }
+
+            poly << "  [l_" << i << "(x)·f(x_" << i << ")]";
+            poly << "\n";
+        }
+
+        if ((int)result.coefficients.size() > maxTerms)
+            poly << "       + ... (共 " << result.coefficients.size() << " 项)\n";
+
+        poly << "\n基函数值 l_i(" << fmt(xVal, 6) << ")：\n";
+        for (int i = 0; i < (int)result.coefficients.size() && i < 12; ++i)
+        {
+            poly << "  l_" << std::setw(2) << i << " = "
+                 << std::setw(16) << std::setprecision(10)
+                 << result.coefficients[i] << "\n";
+        }
+        if ((int)result.coefficients.size() > 12)
+            poly << "  ... (共 " << result.coefficients.size() << " 个基函数)\n";
+
+        poly << "\n提示：按 Tab 键可切换到其他标签页\n";
         ui_.output().addTextTab("多项式", poly.str());
     }
 
     if (!result.stepDesc.empty())
     {
         std::ostringstream steps;
-        steps << "计算步骤：\n";
+        steps << "计算步骤详解\n";
+        steps << "════════════════════════════════════════════════════════\n\n";
+
+        int stepCount = 0;
         for (const auto &step : result.stepDesc)
         {
-            steps << step << "\n";
+            steps << step;
+            if (stepCount < (int)result.stepDesc.size() - 1)
+                steps << "\n"
+                      << std::string(56, '-') << "\n\n";
+            stepCount++;
         }
+
+        steps << "\n提示：内容较长时可使用方向键滚动查看\n";
         ui_.output().addTextTab("步骤", steps.str());
     }
 
@@ -2654,6 +2773,510 @@ void Manager::computeLagrange(const std::string &expName)
         plot << "\nx in [" << fmt(minX, 8) << ", " << fmt(maxX, 8) << "]\n";
         plot << "y in [" << fmt(minY, 8) << ", " << fmt(maxY, 8) << "]\n";
         plot << "插值点: (" << fmt(xVal, 8) << ", " << fmt(result.value, 8) << ")\n";
+        ui_.output().addTextTab("图像", plot.str());
+    }
+
+    st.last.has = true;
+}
+
+// 简单反插值
+void Manager::computeInverseInterpolation(const std::string &expName)
+{
+    auto &st = states_[expName];
+
+    // 获取函数值表
+    const auto &table = st.valueTable;
+    if (table.rows() < 2 || table.cols() < 2)
+    {
+        ui_.output().clear();
+        ui_.output().addTextTab("错误", "请先设置有效的函数值表（至少2个节点）");
+        return;
+    }
+
+    // 提取 x 和 y
+    std::vector<double> xData, yData;
+    for (int i = 0; i < table.rows(); ++i)
+    {
+        xData.push_back(table(i, 0));
+        yData.push_back(table(i, 1));
+    }
+
+    // 获取输入参数（字段0是提示文字，实际输入从1开始）
+    double yVal = toDouble(ui_.getInputValue(1), 0.0);    // 目标函数值 C
+    int method = toInt(ui_.getInputValue(2), 1);          // 方法选择：1=反函数，2=迭代
+    double x0 = toDouble(ui_.getInputValue(3), xData[0]); // 迭代初值（仅方法2使用）
+    int maxIter = toInt(ui_.getInputValue(4), 50);        // 最大迭代次数
+    double tol = toDouble(ui_.getInputValue(5), 1e-6);    // 容差
+
+    calc::InterpolationResult result;
+
+    if (method == 1)
+    {
+        // 方法1：反函数插值（交换x和y）
+        result = calc::inverseInterpolationBySwap(xData, yData, yVal);
+    }
+    else
+    {
+        // 方法2：正函数迭代反插值
+        result = calc::inverseInterpolationByIteration(xData, yData, yVal, x0, maxIter, tol);
+    }
+
+    // 显示结果
+    ui_.output().clear();
+
+    if (!result.success)
+    {
+        ui_.output().addTextTab("错误", result.errorMsg);
+        return;
+    }
+
+    // 摘要标签
+    std::ostringstream summary;
+    summary << std::fixed << std::setprecision(8);
+    summary << (method == 1 ? "反函数插值（交换x和y）" : "正函数迭代反插值") << "\n\n";
+    summary << "目标：求 x 使得 f(x) = " << yVal << "\n";
+    summary << "方法：" << result.method << "\n\n";
+    summary << "求解结果：\n";
+    summary << "x ≈ " << result.value << "\n\n";
+
+    if (method == 2)
+    {
+        summary << "迭代初值：x0 = " << x0 << "\n";
+        summary << "最大迭代次数：" << maxIter << "\n";
+        summary << "收敛精度：" << tol << "\n\n";
+    }
+
+    if (!result.errorMsg.empty())
+    {
+        summary << "警告：" << result.errorMsg << "\n";
+    }
+
+    ui_.output().addTextTab("摘要", summary.str());
+
+    // 差分表/差商表（方法2）
+    if (method == 2 && !result.table.empty())
+    {
+        UiOutputPane::TableData tbl;
+
+        // 判断是等距还是不等距
+        bool isEquidistant = true;
+        double h = xData[1] - xData[0];
+        for (size_t i = 2; i < xData.size(); ++i)
+        {
+            if (std::abs((xData[i] - xData[i - 1]) - h) > 1e-10)
+            {
+                isEquidistant = false;
+                break;
+            }
+        }
+
+        if (isEquidistant)
+        {
+            // 差分表
+            tbl.headers = {"i", "x_i", "k=0", "k=1", "k=2", "k=3", "k=4"};
+            for (size_t i = 0; i < result.table.size(); ++i)
+            {
+                std::vector<std::string> row;
+                row.push_back(std::to_string(i));
+                row.push_back(fmt(xData[i]));
+                for (size_t j = 0; j < result.table[i].size() && j < 5; ++j)
+                {
+                    row.push_back(fmt(result.table[i][j]));
+                }
+                tbl.rows.push_back(row);
+            }
+            ui_.output().addTableTab("差分表", tbl);
+        }
+        else
+        {
+            // 差商表
+            tbl.headers = {"i", "x_i", "k=0", "k=1", "k=2", "k=3"};
+            for (size_t i = 0; i < result.table.size(); ++i)
+            {
+                std::vector<std::string> row;
+                row.push_back(std::to_string(i));
+                row.push_back(fmt(xData[i]));
+                for (size_t j = 0; j < result.table[i].size() && j < 4; ++j)
+                {
+                    row.push_back(fmt(result.table[i][j]));
+                }
+                tbl.rows.push_back(row);
+            }
+            ui_.output().addTableTab("差商表", tbl);
+        }
+    }
+
+    // 多项式标签（方法1）
+    if (method == 1 && !result.polynomial.empty())
+    {
+        ui_.output().addTextTab("多项式", result.polynomial);
+    }
+
+    // 步骤标签
+    if (!result.stepDesc.empty())
+    {
+        std::ostringstream steps;
+        steps << "计算步骤详解\n";
+        steps << "════════════════════════════════════════════════════════\n\n";
+
+        int stepCount = 0;
+        for (const auto &step : result.stepDesc)
+        {
+            steps << step;
+            if (stepCount < (int)result.stepDesc.size() - 1)
+                steps << "\n"
+                      << std::string(56, '-') << "\n\n";
+            stepCount++;
+        }
+
+        steps << "\n提示：内容较长时可使用方向键滚动查看\n";
+        ui_.output().addTextTab("步骤", steps.str());
+    }
+
+    // 图像标签（绘制函数曲线和反插值点）
+    {
+        // 使用插值方法绘制函数曲线
+        double minX = xData.front();
+        double maxX = xData.back();
+        double minY = *std::min_element(yData.begin(), yData.end());
+        double maxY = *std::max_element(yData.begin(), yData.end());
+
+        // 扩展y范围包含目标值
+        minY = std::min(minY, yVal - 0.1 * std::abs(yVal));
+        maxY = std::max(maxY, yVal + 0.1 * std::abs(yVal));
+
+        const int W = 80, H = 20;
+        std::vector<std::string> canvas(H, std::string(W, ' '));
+
+        // 绘制坐标轴
+        int yAxisCol = 5;
+        int xAxisRow = H - 3;
+        for (int r = 0; r < H; ++r)
+            canvas[r][yAxisCol] = '|';
+        for (int c = 0; c < W; ++c)
+            canvas[xAxisRow][c] = '-';
+        canvas[xAxisRow][yAxisCol] = '+';
+
+        // 绘制数据点
+        for (size_t i = 0; i < xData.size(); ++i)
+        {
+            double xNorm = (xData[i] - minX) / (maxX - minX);
+            double yNorm = (yData[i] - minY) / (maxY - minY);
+            int col = yAxisCol + 1 + (int)(xNorm * (W - yAxisCol - 2));
+            int row = H - 1 - (int)(yNorm * (H - 2));
+            if (row >= 0 && row < H && col >= 0 && col < W)
+                canvas[row][col] = '*';
+        }
+
+        // 绘制反插值点（横坐标为求得的x，纵坐标为目标yVal）
+        {
+            double xNorm = (result.value - minX) / (maxX - minX);
+            double yNorm = (yVal - minY) / (maxY - minY);
+            int col = yAxisCol + 1 + (int)(xNorm * (W - yAxisCol - 2));
+            int row = H - 1 - (int)(yNorm * (H - 2));
+            if (row >= 0 && row < H && col >= 0 && col < W)
+                canvas[row][col] = '#';
+        }
+
+        std::ostringstream plot;
+        plot << std::fixed << std::setprecision(6);
+        plot << "函数图像（* 数据点，# 反插值点）\n";
+        for (const auto &line : canvas)
+            plot << line << "\n";
+        plot << "\nx in [" << fmt(minX, 8) << ", " << fmt(maxX, 8) << "]\n";
+        plot << "y in [" << fmt(minY, 8) << ", " << fmt(maxY, 8) << "]\n";
+        plot << "反插值点: (" << fmt(result.value, 8) << ", " << fmt(yVal, 8) << ")\n";
+        ui_.output().addTextTab("图像", plot.str());
+    }
+
+    st.last.has = true;
+}
+
+void Manager::computeHermite(const std::string &expName)
+{
+    auto &st = states_[expName];
+
+    // 获取函数值表（需要3列：x, f(x), f'(x)）
+    const auto &table = st.valueTable;
+    if (table.rows() < 2 || table.cols() < 3)
+    {
+        ui_.output().clear();
+        ui_.output().addTextTab("错误", "请先设置有效的函数值表（至少2个节点，需包含 x, f(x), f'(x) 三列）");
+        return;
+    }
+
+    // 提取 x, y, dy
+    std::vector<double> xData, yData, dyData;
+    for (int i = 0; i < table.rows(); ++i)
+    {
+        xData.push_back(table(i, 0));
+        yData.push_back(table(i, 1));
+        dyData.push_back(table(i, 2));
+    }
+
+    // 获取插值点（字段0是提示，字段1是实际输入）
+    double xVal = toDouble(ui_.getInputValue(1), 0.5);
+
+    // 调用插值算法
+    calc::InterpolationResult result = calc::hermiteInterpolation(xData, yData, dyData, xVal);
+
+    ui_.output().clear();
+
+    if (!result.success)
+    {
+        ui_.output().addTextTab("错误", result.errorMsg);
+        return;
+    }
+
+    // 摘要标签
+    std::ostringstream summary;
+    summary << std::fixed << std::setprecision(8);
+    summary << "埃尔米特插值（牛顿型）\n\n";
+    summary << "节点数：" << xData.size() << "\n";
+    summary << "插值点：x = " << xVal << "\n\n";
+    summary << "插值结果：\n";
+    summary << "H(" << xVal << ") = " << result.value << "\n\n";
+    summary << "方法：" << result.method;
+    ui_.output().addTextTab("摘要", summary.str());
+
+    // 差商表标签 - 使用表格格式
+    std::ostringstream tableTab;
+    tableTab << std::fixed << std::setprecision(6);
+    tableTab << "重节点广义差商表\n";
+    tableTab << "════════════════════════════════════════════════════════\n\n";
+
+    int m = (int)result.table.size();
+
+    // 节点序列说明
+    tableTab << "节点序列（每个原始节点重复2次）：\n";
+    for (int i = 0; i < std::min(m, 10); ++i)
+    {
+        int origIdx = i / 2;
+        tableTab << "  z" << i << " = " << std::setw(8) << xData[origIdx];
+        if (i % 2 == 0)
+            tableTab << " [f(x)]";
+        else
+            tableTab << " [f'(x)]";
+        tableTab << "\n";
+    }
+    if (m > 10)
+        tableTab << "  ... (共 " << m << " 个重节点)\n";
+    tableTab << "\n";
+
+    // 表格形式的差商表（显示前6阶，前12行）
+    int maxOrder = std::min(6, m);
+    int maxRows = std::min(12, m);
+
+    tableTab << "差商表（表格形式）：\n\n";
+
+    // 表头
+    tableTab << std::setw(6) << "i";
+    for (int k = 0; k < maxOrder; ++k)
+    {
+        tableTab << std::setw(14) << ("k=" + std::to_string(k));
+    }
+    tableTab << "\n";
+
+    // 分隔线
+    tableTab << std::string(6 + maxOrder * 14, '-') << "\n";
+
+    // 数据行
+    for (int i = 0; i < maxRows; ++i)
+    {
+        tableTab << std::setw(6) << i;
+        for (int k = 0; k < maxOrder && k < (int)result.table[i].size(); ++k)
+        {
+            tableTab << std::setw(14) << std::setprecision(6) << result.table[i][k];
+        }
+        for (int k = (int)result.table[i].size(); k < maxOrder; ++k)
+        {
+            tableTab << std::setw(14) << "";
+        }
+        tableTab << "\n";
+    }
+
+    if (m > maxRows)
+        tableTab << "\n提示：共 " << m << " 行，仅显示前 " << maxRows << " 行\n";
+    if (m > maxOrder)
+        tableTab << "提示：共 " << m << " 阶，仅显示前 " << maxOrder << " 阶\n";
+
+    tableTab << "\n提示：按 Tab 键可切换标签页查看其他内容\n";
+    ui_.output().addTextTab("差商表", tableTab.str());
+
+    // 多项式标签 - 分项换行显示
+    std::ostringstream polyTab;
+    polyTab << std::fixed << std::setprecision(6);
+    polyTab << "插值多项式（牛顿型）\n";
+    polyTab << "════════════════════════════════════════════════════════\n\n";
+    polyTab << "H(x) = a0 + a1(x-z0) + a2(x-z0)(x-z1) + ...\n\n";
+
+    // 分项显示，每项一行
+    polyTab << "展开形式（按项）：\n\n";
+    int maxTerms = std::min(10, (int)result.coefficients.size());
+
+    for (int k = 0; k < maxTerms; ++k)
+    {
+        if (k == 0)
+        {
+            polyTab << "  H(x) = " << std::setw(12) << result.coefficients[0];
+        }
+        else
+        {
+            polyTab << "       ";
+            if (result.coefficients[k] >= 0)
+                polyTab << " + ";
+            else
+                polyTab << " - ";
+
+            polyTab << std::setw(12) << std::abs(result.coefficients[k]);
+
+            // 显示基函数
+            polyTab << " * ";
+            for (int j = 0; j < k && j < 5; ++j)
+            {
+                if (j > 0)
+                    polyTab << "";
+                int origIdx = j / 2;
+                polyTab << "(x-" << xData[origIdx] << ")";
+            }
+            if (k > 5)
+                polyTab << "...";
+        }
+        polyTab << "\n";
+    }
+
+    if ((int)result.coefficients.size() > maxTerms)
+        polyTab << "       + ... (共 " << result.coefficients.size() << " 项)\n";
+
+    polyTab << "\n系数列表：\n";
+    for (int i = 0; i < (int)result.coefficients.size() && i < 15; ++i)
+    {
+        polyTab << "  a" << std::setw(2) << i << " = "
+                << std::setw(14) << std::setprecision(10) << result.coefficients[i] << "\n";
+    }
+    if ((int)result.coefficients.size() > 15)
+        polyTab << "  ... (共 " << result.coefficients.size() << " 个系数)\n";
+
+    polyTab << "\n提示：按 Tab 键可切换到其他标签页\n";
+    ui_.output().addTextTab("多项式", polyTab.str());
+
+    // 步骤标签 - 添加翻页提示
+    std::ostringstream steps;
+    steps << "计算步骤详解\n";
+    steps << "════════════════════════════════════════════════════════\n\n";
+
+    int stepCount = 0;
+    for (const auto &step : result.stepDesc)
+    {
+        steps << step;
+        if (stepCount < (int)result.stepDesc.size() - 1)
+            steps << "\n"
+                  << std::string(56, '-') << "\n\n";
+        stepCount++;
+    }
+
+    steps << "\n提示：内容较长时可使用方向键滚动查看\n";
+    steps << "提示：按 Tab 键可切换到其他标签页\n";
+    ui_.output().addTextTab("步骤", steps.str());
+
+    // 图像标签（ASCII绘图）
+    if (xData.size() >= 2)
+    {
+        double xmin = *std::min_element(xData.begin(), xData.end());
+        double xmax = *std::max_element(xData.begin(), xData.end());
+        double margin = (xmax - xmin) * 0.2;
+        xmin -= margin;
+        xmax += margin;
+
+        std::ostringstream plot;
+        plot << "埃尔米特插值函数图像：\n\n";
+
+        // 在更多点处计算插值
+        std::vector<double> plotX, plotY;
+        int nPlotPoints = 50;
+        for (int i = 0; i <= nPlotPoints; ++i)
+        {
+            double x = xmin + (xmax - xmin) * i / nPlotPoints;
+            auto res = calc::hermiteInterpolation(xData, yData, dyData, x);
+            if (res.success)
+            {
+                plotX.push_back(x);
+                plotY.push_back(res.value);
+            }
+        }
+
+        // ASCII 绘图
+        auto fmt = [](double v, int w) -> std::string
+        {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(4) << std::setw(w) << v;
+            return oss.str();
+        };
+
+        if (!plotY.empty())
+        {
+            double ymin = *std::min_element(plotY.begin(), plotY.end());
+            double ymax = *std::max_element(plotY.begin(), plotY.end());
+            double yrange = ymax - ymin;
+            if (yrange < 1e-10)
+                yrange = 1.0;
+
+            const int plotH = 20, plotW = 60;
+            std::vector<std::string> canvas(plotH, std::string(plotW, ' '));
+
+            // 绘制曲线
+            for (size_t i = 0; i < plotX.size(); ++i)
+            {
+                int col = (int)((plotX[i] - xmin) / (xmax - xmin) * (plotW - 1));
+                int row = plotH - 1 - (int)((plotY[i] - ymin) / yrange * (plotH - 1));
+                col = std::clamp(col, 0, plotW - 1);
+                row = std::clamp(row, 0, plotH - 1);
+                canvas[row][col] = '*';
+            }
+
+            // 标记原始节点
+            for (size_t i = 0; i < xData.size(); ++i)
+            {
+                int col = (int)((xData[i] - xmin) / (xmax - xmin) * (plotW - 1));
+                int row = plotH - 1 - (int)((yData[i] - ymin) / yrange * (plotH - 1));
+                col = std::clamp(col, 0, plotW - 1);
+                row = std::clamp(row, 0, plotH - 1);
+                canvas[row][col] = 'O';
+            }
+
+            // 标记插值点
+            {
+                int col = (int)((xVal - xmin) / (xmax - xmin) * (plotW - 1));
+                int row = plotH - 1 - (int)((result.value - ymin) / yrange * (plotH - 1));
+                col = std::clamp(col, 0, plotW - 1);
+                row = std::clamp(row, 0, plotH - 1);
+                canvas[row][col] = '#';
+            }
+
+            plot << "  " << fmt(ymax, 10) << " +";
+            for (int c = 0; c < plotW; ++c)
+                plot << (canvas[0][c] != ' ' ? canvas[0][c] : '-');
+            plot << "\n";
+
+            for (int r = 1; r < plotH - 1; ++r)
+            {
+                plot << "             |";
+                for (int c = 0; c < plotW; ++c)
+                    plot << (canvas[r][c] != ' ' ? canvas[r][c] : (c == 0 ? '|' : ' '));
+                plot << "\n";
+            }
+
+            plot << "  " << fmt(ymin, 10) << " +";
+            for (int c = 0; c < plotW; ++c)
+                plot << (canvas[plotH - 1][c] != ' ' ? canvas[plotH - 1][c] : '-');
+            plot << "\n";
+            plot << "             " << fmt(xmin, 10) << std::string(plotW - 20, ' ') << fmt(xmax, 10) << "\n\n";
+        }
+
+        plot << "图例：\n";
+        plot << "  * : 插值曲线\n";
+        plot << "  O : 原始节点 (x_i, f(x_i))\n";
+        plot << "  # : 插值点 (" << fmt(xVal, 8) << ", " << fmt(result.value, 8) << ")\n";
         ui_.output().addTextTab("图像", plot.str());
     }
 

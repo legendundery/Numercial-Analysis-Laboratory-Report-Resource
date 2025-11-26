@@ -80,6 +80,39 @@ void Manager::ensureValueTablePresets()
         }
         valueTablePresets_.push_back(p);
     }
+
+    // 埃尔米特插值专用预设1：例5.14
+    {
+        ValueTablePreset p;
+        p.name = "例5.14 (含二阶导数)";
+        p.table = calc::Matrix(2, 4);
+        // x=0: f(0)=3, f'(0)=4, f''(0)
+        p.table(0, 0) = 0.0;
+        p.table(0, 1) = 3.0;
+        p.table(0, 2) = 4.0;
+        p.table(0, 3) = std::nan(""); // 二阶导数未知
+        // x=1: f(1)=5, f'(1)=6, f''(1)=7
+        p.table(1, 0) = 1.0;
+        p.table(1, 1) = 5.0;
+        p.table(1, 2) = 6.0;
+        p.table(1, 3) = 7.0;
+        valueTablePresets_.push_back(p);
+    }
+
+    // 埃尔米特插值专用预设2：x^2
+    {
+        ValueTablePreset p;
+        p.name = "x^2 (含导数)";
+        p.table = calc::Matrix(3, 3);
+        for (int i = 0; i < 3; ++i)
+        {
+            double x = i * 1.0;
+            p.table(i, 0) = x;
+            p.table(i, 1) = x * x;   // f(x) = x^2
+            p.table(i, 2) = 2.0 * x; // f'(x) = 2x
+        }
+        valueTablePresets_.push_back(p);
+    }
 }
 
 void Manager::showValueTableInputDialog(const std::string &expName, bool isAddNew)

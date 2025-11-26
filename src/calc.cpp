@@ -1818,4 +1818,425 @@ namespace calc
 
         return result;
     }
+
+    // ==================== 反函数插值（方法1：交换x和y） ====================
+
+    InterpolationResult inverseInterpolationBySwap(const std::vector<double> &x,
+                                                   const std::vector<double> &y,
+                                                   double yVal)
+    {
+        InterpolationResult result;
+
+        if (x.size() != y.size() || x.empty())
+        {
+            result.errorMsg = "输入数据无效或为空";
+            return result;
+        }
+
+        // 检查单调性（反函数存在的必要条件）
+        bool isMonotone = true;
+        bool increasing = y[1] > y[0];
+        for (size_t i = 1; i < y.size() - 1; ++i)
+        {
+            if ((y[i + 1] > y[i]) != increasing)
+            {
+                isMonotone = false;
+                break;
+            }
+        }
+
+        if (!isMonotone)
+        {
+            result.errorMsg = "警告：函数在节点上非单调，反函数可能不存在或不唯一";
+            // 继续计算，但标记警告
+        }
+
+        // 交换 x 和 y 的角色，用拉格朗日插值计算
+        auto swappedResult = lagrangeInterpolation(y, x, yVal);
+
+        // 复制结果并调整描述
+        result.success = swappedResult.success;
+        result.value = swappedResult.value;
+        result.errorMsg = swappedResult.errorMsg.empty() ? result.errorMsg : swappedResult.errorMsg;
+        result.coefficients = swappedResult.coefficients;
+        result.method = "反函数插值（交换x和y）";
+
+        // 构建多项式表达式（x作为y的函数）
+        std::ostringstream polyStream;
+        polyStream << std::fixed << std::setprecision(6);
+        polyStream << "x(y) = ";
+        for (size_t i = 0; i < result.coefficients.size(); ++i)
+        {
+            if (i > 0)
+                polyStream << "\n       + ";
+            polyStream << "l_" << i << "(y)·x_" << i << " = " << result.coefficients[i] << " × " << x[i];
+        }
+        result.polynomial = polyStream.str();
+
+        // 步骤说明
+        result.stepDesc.clear();
+        std::ostringstream desc;
+        desc << "反函数插值：交换x和y的角色";
+        desc << "\n给定 y = " << yVal << "，求对应的 x";
+        desc << "\n使用拉格朗日插值 x(y) 计算 x(" << yVal << ") = " << result.value;
+        result.stepDesc.push_back(desc.str());
+
+        // 添加原始拉格朗日的基函数计算步骤
+        for (const auto &step : swappedResult.stepDesc)
+        {
+            if (step.find("l_") != std::string::npos)
+            {
+                result.stepDesc.push_back(step);
+            }
+        }
+
+        return result;
+    }
+
+    // ==================== 正函数迭代反插值（方法2） ====================
+
+    InterpolationResult inverseInterpolationByIteration(const std::vector<double> &x,
+                                                        const std::vector<double> &y,
+                                                        double C,
+                                                        double x0,
+                                                        int maxIter,
+                                                        double tol)
+    {
+        InterpolationResult result;
+
+        if (x.size() != y.size() || x.empty())
+        {
+            result.errorMsg = "输入数据无效或为空";
+            return result;
+        }
+
+        int n = x.size();
+
+        // 判断是否等距节点
+        bool isEquidistant = true;
+        double h = 0.0;
+        if (n >= 2)
+        {
+            h = x[1] - x[0];
+            for (int i = 2; i < n; ++i)
+            {
+                if (std::abs((x[i] - x[i - 1]) - h) > 1e-10)
+                {
+                    isEquidistant = false;
+                    break;
+                }
+            }
+        }
+
+        std::ostringstream methodDesc;
+        if (isEquidistant)
+        {
+            methodDesc << "等距节点，使用牛顿差分公式迭代";
+        }
+        else
+        {
+            methodDesc << "不等距节点，使用牛顿差商公式迭代";
+        }
+
+        result.stepDesc.push_back(methodDesc.str());
+
+        // 构建差商表或差分表
+        std::vector<std::vector<double>> diffTable;
+        if (isEquidistant)
+        {
+            diffTable = forwardDifferenceTable(y);
+            result.table = diffTable;
+        }
+        else
+        {
+            diffTable = dividedDifferenceTable(x, y);
+            result.table = diffTable;
+        }
+
+        // 迭代求解
+        double xk = x0;
+        std::vector<std::string> iterationSteps;
+
+        for (int iter = 0; iter < maxIter; ++iter)
+        {
+            // 使用插值公式计算 f(x^(k))
+            InterpolationResult interpResult;
+            if (isEquidistant)
+            {
+                // 根据位置选择前插或后插
+                double t = (xk - x[0]) / h;
+                if (t < (n - 1) / 2.0)
+                {
+                    interpResult = newtonForwardDifference(x, y, xk);
+                }
+                else
+                {
+                    interpResult = newtonBackwardDifference(x, y, xk);
+                }
+            }
+            else
+            {
+                interpResult = newtonDividedDifference(x, y, xk);
+            }
+
+            if (!interpResult.success)
+            {
+                result.errorMsg = "迭代中插值计算失败：" + interpResult.errorMsg;
+                return result;
+            }
+
+            double fxk = interpResult.value;
+
+            // 计算 f(x_0)
+            double f_x0 = isEquidistant ? newtonForwardDifference(x, y, x[0]).value : newtonDividedDifference(x, y, x[0]).value;
+
+            // 迭代公式：x^(k+1) = x0 + (C - f(x0)) / f[x0, x^(k)] + ...
+            double xk_next;
+
+            if (iter == 0)
+            {
+                // 第一次迭代：x^(1) = x0 + (C - f(x0)) / f[x0, x1]
+                double f_x1 = isEquidistant ? newtonForwardDifference(x, y, x[1]).value : newtonDividedDifference(x, y, x[1]).value;
+                double diff_01 = (f_x1 - f_x0) / (x[1] - x[0]);
+                xk_next = x[0] + (C - f_x0) / diff_01;
+
+                std::ostringstream stepStr;
+                stepStr << std::fixed << std::setprecision(6);
+                stepStr << "t_0 = " << x0 << "\n";
+                stepStr << "f(x_0) = " << f_x0 << "\n";
+                stepStr << "f(x_1) = " << f_x1 << "\n";
+                stepStr << "f[x_0, x_1] = (" << f_x1 << " - " << f_x0 << ") / (" << x[1] << " - " << x[0] << ") = " << diff_01 << "\n";
+                stepStr << "t_1 = x_0 + (C - f(x_0)) / f[x_0, x_1]";
+                stepStr << " = " << x[0] << " + (" << C << " - " << f_x0 << ") / " << diff_01;
+                stepStr << " = " << xk_next;
+                iterationSteps.push_back(stepStr.str());
+            }
+            else
+            {
+                // 后续迭代：使用当前点xk计算差商
+                // f[x0, xk] = (f(xk) - f(x0)) / (xk - x0)
+                double diff = (fxk - f_x0) / (xk - x[0]);
+                if (std::abs(xk - x[0]) < 1e-15)
+                {
+                    // 如果xk太接近x0，使用表格中的差商
+                    diff = isEquidistant ? (diffTable[0][1] / h) : diffTable[0][1];
+                }
+                xk_next = x[0] + (C - f_x0) / diff;
+
+                std::ostringstream stepStr;
+                stepStr << std::fixed << std::setprecision(6);
+                stepStr << "t_" << iter << " = " << xk << "\n";
+                stepStr << "f(t_" << iter << ") = " << fxk << "\n";
+                stepStr << "f[x_0, t_" << iter << "] = (" << fxk << " - " << f_x0 << ") / (" << xk << " - " << x[0] << ") = " << diff << "\n";
+                stepStr << "t_" << (iter + 1) << " = x_0 + (C - f(x_0)) / f[x_0, t_" << iter << "]";
+                stepStr << " = " << x[0] << " + (" << C << " - " << f_x0 << ") / " << diff;
+                stepStr << " = " << xk_next;
+                iterationSteps.push_back(stepStr.str());
+            }
+
+            // 检查收敛
+            double error = std::abs(xk_next - xk);
+            if (error < tol || std::abs(fxk - C) < tol)
+            {
+                xk = xk_next;
+                result.success = true;
+                result.value = xk;
+                result.method = "正函数迭代反插值（" + std::string(isEquidistant ? "等距" : "不等距") + "）";
+
+                std::ostringstream summary;
+                summary << std::fixed << std::setprecision(6);
+                summary << "迭代收敛，共 " << (iter + 1) << " 次迭代\n";
+                summary << "求解 f(x) = " << C << "，得 x ≈ " << xk;
+                result.stepDesc.insert(result.stepDesc.begin(), summary.str());
+
+                // 添加所有迭代步骤
+                for (const auto &step : iterationSteps)
+                {
+                    result.stepDesc.push_back(step);
+                }
+
+                // 验证结果
+                auto verifyResult = isEquidistant ? newtonForwardDifference(x, y, xk) : newtonDividedDifference(x, y, xk);
+                std::ostringstream verify;
+                verify << "验证：f(" << xk << ") = " << verifyResult.value << "，目标值 C = " << C;
+                result.stepDesc.push_back(verify.str());
+
+                return result;
+            }
+
+            xk = xk_next;
+        }
+
+        // 未收敛
+        result.errorMsg = "迭代未在最大次数内收敛";
+        result.success = false;
+        result.value = xk;
+
+        return result;
+    }
+
+    // 埃尔米特插值（牛顿型）
+    // 使用重节点差商构造插值多项式
+    InterpolationResult hermiteInterpolation(const std::vector<double> &x,
+                                             const std::vector<double> &y,
+                                             const std::vector<double> &dy,
+                                             double xVal)
+    {
+        InterpolationResult result;
+        int n = (int)x.size();
+
+        if (n < 2 || (int)y.size() != n || (int)dy.size() != n)
+        {
+            result.errorMsg = "输入数据长度不一致或节点数少于2";
+            result.success = false;
+            return result;
+        }
+
+        // 构造重节点序列：每个节点 x_i 重复两次（一次用于函数值，一次用于导数值）
+        std::vector<double> z;  // 重节点序列
+        std::vector<double> fz; // 对应的函数值序列
+
+        for (int i = 0; i < n; ++i)
+        {
+            z.push_back(x[i]);
+            z.push_back(x[i]); // 重复节点
+            fz.push_back(y[i]);
+            fz.push_back(y[i]); // 第二次出现时用于差商计算
+        }
+
+        int m = (int)z.size(); // m = 2n
+
+        // 构造广义差商表
+        // table[i][j] 表示 f[z_i, z_{i+1}, ..., z_{i+j}]
+        std::vector<std::vector<double>> table(m, std::vector<double>(m, 0.0));
+
+        // 零阶差商：f[z_i] = f(z_i)
+        for (int i = 0; i < m; ++i)
+        {
+            table[i][0] = fz[i];
+        }
+
+        // 一阶差商：
+        // - 若 z_i ≠ z_{i+1}，使用 f[z_i, z_{i+1}] = (f[z_{i+1}] - f[z_i]) / (z_{i+1} - z_i)
+        // - 若 z_i = z_{i+1}（重节点），使用 f[z_i, z_i] = f'(z_i)
+        for (int i = 0; i < m - 1; ++i)
+        {
+            if (std::abs(z[i + 1] - z[i]) < 1e-12) // 重节点
+            {
+                // z[i] = z[i+1]，使用导数值
+                // i 是偶数索引对应 x[i/2]
+                int origIndex = i / 2;
+                table[i][1] = dy[origIndex];
+            }
+            else
+            {
+                table[i][1] = (table[i + 1][0] - table[i][0]) / (z[i + 1] - z[i]);
+            }
+        }
+
+        // 高阶差商：f[z_i, ..., z_{i+k}] = (f[z_{i+1}, ..., z_{i+k}] - f[z_i, ..., z_{i+k-1}]) / (z_{i+k} - z_i)
+        for (int k = 2; k < m; ++k)
+        {
+            for (int i = 0; i < m - k; ++i)
+            {
+                double denom = z[i + k] - z[i];
+                if (std::abs(denom) < 1e-12)
+                {
+                    // 理论上不应该出现，因为重节点最多重复2次
+                    // 这里简单处理为使用已有值
+                    table[i][k] = table[i][k - 1];
+                }
+                else
+                {
+                    table[i][k] = (table[i + 1][k - 1] - table[i][k - 1]) / denom;
+                }
+            }
+        }
+
+        // 使用牛顿插值公式计算 H(xVal)
+        double H = table[0][0];
+        double prod = 1.0;
+        std::vector<double> coeffs;
+        coeffs.push_back(table[0][0]);
+
+        for (int k = 1; k < m; ++k)
+        {
+            prod *= (xVal - z[k - 1]);
+            H += table[0][k] * prod;
+            coeffs.push_back(table[0][k]);
+        }
+
+        result.success = true;
+        result.value = H;
+        result.method = "埃尔米特插值（牛顿型）";
+        result.table = table;
+        result.coefficients = coeffs;
+
+        // 构造多项式字符串（简化版）
+        std::ostringstream poly;
+        poly << std::fixed << std::setprecision(6);
+        poly << "H(x) = " << coeffs[0];
+        for (int k = 1; k < (int)coeffs.size() && k < 10; ++k)
+        {
+            if (std::abs(coeffs[k]) > 1e-10)
+            {
+                poly << (coeffs[k] >= 0 ? " + " : " - ") << std::abs(coeffs[k]);
+                for (int j = 0; j < k; ++j)
+                {
+                    poly << "(x - " << z[j] << ")";
+                }
+            }
+        }
+        if ((int)coeffs.size() > 10)
+            poly << " + ...";
+        result.polynomial = poly.str();
+
+        // 步骤描述
+        std::ostringstream step;
+        step << std::fixed << std::setprecision(6);
+        step << "重节点序列构造：\n";
+        for (int i = 0; i < n; ++i)
+        {
+            step << "  节点 x" << i << " = " << x[i] << " (重复2次)\n";
+            step << "    f(" << x[i] << ") = " << y[i] << "\n";
+            step << "    f'(" << x[i] << ") = " << dy[i] << "\n";
+        }
+        result.stepDesc.push_back(step.str());
+
+        std::ostringstream step2;
+        step2 << std::fixed << std::setprecision(8);
+        step2 << "差商表构造：\n";
+        step2 << "零阶差商（函数值）：\n";
+        for (int i = 0; i < m && i < 20; ++i)
+        {
+            step2 << "  f[z" << i << "] = " << table[i][0] << "\n";
+        }
+        step2 << "\n一阶差商（含导数）：\n";
+        for (int i = 0; i < m - 1 && i < 20; ++i)
+        {
+            if (std::abs(z[i + 1] - z[i]) < 1e-12)
+            {
+                step2 << "  f[z" << i << ",z" << i << "] = f'(" << z[i] << ") = " << table[i][1] << "\n";
+            }
+            else
+            {
+                step2 << "  f[z" << i << ",z" << (i + 1) << "] = " << table[i][1] << "\n";
+            }
+        }
+        result.stepDesc.push_back(step2.str());
+
+        std::ostringstream step3;
+        step3 << std::fixed << std::setprecision(8);
+        step3 << "插值计算：\n";
+        step3 << "在 x = " << xVal << " 处：\n";
+        step3 << "H(" << xVal << ") = " << result.value << "\n\n";
+        step3 << "系数（前10项）：\n";
+        for (int i = 0; i < (int)coeffs.size() && i < 10; ++i)
+        {
+            step3 << "  a" << i << " = " << coeffs[i] << "\n";
+        }
+        result.stepDesc.push_back(step3.str());
+
+        return result;
+    }
 }

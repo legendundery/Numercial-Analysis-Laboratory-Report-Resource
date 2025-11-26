@@ -39,7 +39,9 @@ void Manager::bindUiCallbacks()
             name.find("全主元素法") == std::string::npos &&
             name.find("差商") == std::string::npos &&
             name.find("差分") == std::string::npos &&
-            name.find("拉格朗日") == std::string::npos)
+            name.find("拉格朗日") == std::string::npos &&
+            name.find("反插值") == std::string::npos &&
+            name.find("埃尔米特") == std::string::npos)
         {
             useExperiment(name);
         } });
@@ -51,7 +53,9 @@ void Manager::bindUiCallbacks()
         // 函数值表类方法：切换函数值表预设
         if (name.find("差商") != std::string::npos ||
             name.find("差分") != std::string::npos ||
-            name.find("拉格朗日") != std::string::npos)
+            name.find("拉格朗日") != std::string::npos ||
+            name.find("埃尔米特") != std::string::npos ||
+            name.find("反插值") != std::string::npos)
         {
             cycleValueTablePresetFor(name, delta);
         }
@@ -81,7 +85,9 @@ void Manager::bindUiCallbacks()
         // 函数值表类方法：添加函数值表预设
         if (name.find("差商") != std::string::npos ||
             name.find("差分") != std::string::npos ||
-            name.find("拉格朗日") != std::string::npos)
+            name.find("拉格朗日") != std::string::npos ||
+            name.find("埃尔米特") != std::string::npos ||
+            name.find("反插值") != std::string::npos)
         {
             addValueTablePreset();
         }
@@ -110,7 +116,9 @@ void Manager::bindUiCallbacks()
         // 函数值表类方法：支持函数值表编辑
         if (name.find("差商") != std::string::npos ||
             name.find("差分") != std::string::npos ||
-            name.find("拉格朗日") != std::string::npos)
+            name.find("拉格朗日") != std::string::npos ||
+            name.find("埃尔米特") != std::string::npos ||
+            name.find("反插值") != std::string::npos)
         {
             showValueTableInputDialog(name, false);
         }
@@ -294,6 +302,16 @@ void Manager::computeExperiment(const std::string &name)
         computeLagrange(name);
         return;
     }
+    if (name.find("反插值") != string::npos)
+    {
+        computeInverseInterpolation(name);
+        return;
+    }
+    if (name.find("埃尔米特") != string::npos)
+    {
+        computeHermite(name);
+        return;
+    }
     if (name.find("差商") != string::npos || name.find("差分") != string::npos)
     {
         computeDividedDifference(name);
@@ -433,7 +451,33 @@ void Manager::ensureDefaultsFor(const std::string &name)
         st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
         st.fields.push_back({"待求插值点 x:", "1.5", "实数", 50});
         ensureValueTablePresets();
-        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        if (st.valueTable.rows() == 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
+    }
+    else if (name.find("反插值") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
+        st.fields.push_back({"目标函数值 C:", "0.0", "求f(x)=C的x值", 50});
+        st.fields.push_back({"方法:", "1", "1=反函数,2=迭代", 50});
+        st.fields.push_back({"迭代初值 x0:", "1.0", "仅方法2需要", 50});
+        st.fields.push_back({"最大迭代次数:", "50", "仅方法2", 50});
+        st.fields.push_back({"收敛精度:", "1e-6", "仅方法2", 50});
+        ensureValueTablePresets();
+        if (st.valueTable.rows() == 0 && !valueTablePresets_.empty())
+        {
+            st.valueTablePresetIndex = 0;
+            st.valueTable = valueTablePresets_[0].table;
+        }
+    }
+    else if (name.find("埃尔米特") != string::npos)
+    {
+        st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "需包含 x, f(x), f'(x) 三列", 50});
+        st.fields.push_back({"待求插值点 x:", "0.5", "实数", 50});
+        ensureValueTablePresets();
+        if (st.valueTable.rows() == 0 && !valueTablePresets_.empty())
         {
             st.valueTablePresetIndex = 0;
             st.valueTable = valueTablePresets_[0].table;
@@ -443,7 +487,7 @@ void Manager::ensureDefaultsFor(const std::string &name)
     {
         st.fields.push_back({"点击说明区 [m] 键编辑函数值表", "", "或使用预设 ([<][>] 切换)", 50});
         ensureValueTablePresets();
-        if (st.valueTablePresetIndex < 0 && !valueTablePresets_.empty())
+        if (st.valueTable.rows() == 0 && !valueTablePresets_.empty())
         {
             st.valueTablePresetIndex = 0;
             st.valueTable = valueTablePresets_[0].table;
@@ -749,6 +793,32 @@ void Manager::fillDescriptionFor(const std::string &name)
             oss << preset.table.rows() << " 个点)\n";
         }
         oss << "- 提示：按 [<] [>] 切换预设；按 [a] 创建新预设；按 [m] 编辑函数值表\n";
+    }
+    else if (name.find("反插值") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "反插值：已知 f(x)=C，求 x\n";
+        oss << "方法1：交换x/y，用拉格朗日插值\n";
+        oss << "方法2：迭代法 x^(k+1)=x_0+(C-f(x_0))/f[x_0,x^k]\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "当前：" << preset.name << " (" << preset.table.rows() << "点)\n";
+        }
+        oss << "按 [<][>] 切换预设；[m] 编辑表；[a] 新增\n";
+    }
+    else if (name.find("埃尔米特") != string::npos)
+    {
+        ensureValueTablePresets();
+        oss << "埃尔米特插值：需函数值和导数值\n";
+        oss << "使用重节点差商：f[xi,xi]=f'(xi)\n";
+        oss << "输入表格需3列：x, f(x), f'(x)\n";
+        if (!valueTablePresets_.empty())
+        {
+            const auto &preset = valueTablePresets_[states_[name].valueTablePresetIndex % valueTablePresets_.size()];
+            oss << "当前：" << preset.name << " (" << preset.table.rows() << "点)\n";
+        }
+        oss << "按 [<][>] 切换预设；[m] 编辑表；[a] 新增\n";
     }
     else if (name.find("差商") != string::npos || name.find("差分") != string::npos)
     {
