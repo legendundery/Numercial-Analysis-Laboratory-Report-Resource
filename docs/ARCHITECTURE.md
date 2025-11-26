@@ -83,9 +83,6 @@ Numercial Analysis/
 │   ├── README.md                # 项目说明
 │   ├── ARCHITECTURE.md          # 本架构文档（你在这里）
 │   ├── API_DOC.md               # API 文档
-│   ├── CHAPTER4_GUIDE.md        # 第四章迭代法指南
-│   ├── MULTI_INPUT_GUIDE.md     # 多输入框指南
-│   ├── QUICK_REFERENCE.md       # 快速参考
 │
 └── main.exe                 # 编译产物
 ```
