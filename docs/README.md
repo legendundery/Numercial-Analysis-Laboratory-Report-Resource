@@ -3,7 +3,7 @@
 > 基于终端UI的交互式数值计算工具，采用C++20实现
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](../LICENSE)
 
 ## 📚 快速导航
 
