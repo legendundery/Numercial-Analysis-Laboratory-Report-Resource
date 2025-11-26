@@ -28,13 +28,13 @@
 **代码统计：**
 
 ```
-总计：~6,700 行 C++ 代码
-├── calc.cpp          1,575 行  (纯算法实现)
-├── compute.cpp       2,359 行  (计算调度与输出)
-├── ui.cpp            1,101 行  (终端界面渲染)
-├── manager.cpp         987 行  (业务逻辑管理)
+总计：~7,724 行 C++ 代码
+├── compute.cpp       2,893 行  (计算调度与输出)
+├── calc.cpp          1,943 行  (纯算法实现)
+├── ui.cpp            1,145 行  (终端界面渲染)
+├── manager.cpp       1,057 行  (业务逻辑管理)
+├── ValueTablePresets.cpp 358 行 (函数值表预设)
 ├── MatrixPresets.cpp   314 行  (矩阵预设数据)
-├── ValueTablePresets.cpp 327 行 (函数值表预设)
 └── main.cpp             14 行  (程序入口)
 ```
 
@@ -118,7 +118,7 @@ Numercial Analysis/
                  │ 调用算法
                  ↓
 ┌─────────────────────────────────────────────────┐
-│               Calc 层 (calc.cpp)                 │
+│               Calc 层 (calc.cpp)                │
 │  • 纯数值算法实现（无 UI 依赖）                   │
 │  • 方程求根、线性方程组、插值等                   │
 │  • 返回结构化计算结果                            │
@@ -217,12 +217,12 @@ struct ExperimentState {
 
 **计算方法分类：**
 
-| 类别                           | 方法数 | 典型函数                                                                      |
-| ------------------------------ | ------ | ----------------------------------------------------------------------------- |
-| **方程求根**             | 8      | `computePlot`, `computeScan`, `computeBisection`, `computeNewton`     |
-| **线性方程组（直接法）** | 6      | `computeGaussElimination`, `computeCholesky`, `computeThomas`           |
-| **线性方程组（迭代法）** | 3      | `computeJacobi`, `computeGaussSeidel`, `computeSOR`                     |
-| **插值法**               | 4      | `computeNewtonDividedDiff`, `computeNewtonEqualDiff`, `computeLagrange` |
+| 类别                           | 方法数 | 典型函数                                                                                               |
+| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------ |
+| **方程求根**             | 8      | `computePlot`, `computeScan`, `computeBisection`, `computeNewton`, `computeAitken`           |
+| **线性方程组（直接法）** | 6      | `computeGaussElimination`, `computeCholesky`, `computeThomas`, `computeColumnPivoting`         |
+| **线性方程组（迭代法）** | 3      | `computeJacobi`, `computeGaussSeidel`, `computeSOR`                                              |
+| **插值法**               | 6      | `computeNewtonDividedDiff`, `computeLagrange`, `computeInverseInterpolation`, `computeHermite` |
 
 **典型计算流程：**
 
@@ -327,14 +327,21 @@ struct InterpolationResult {
     std::string polynomial;                 // 多项式表达式
     std::vector<std::string> stepDesc;      // 计算步骤
     std::string method;                     // 使用的方法
+    std::string errorMsg;                   // 错误信息
 };
 
+// 基本插值
 InterpolationResult newtonDividedDifference(x, y, xVal);  // 牛顿差商（不等距）
 InterpolationResult newtonForwardDifference(x, y, xVal);  // 牛顿前插（等距）
 InterpolationResult newtonBackwardDifference(x, y, xVal); // 牛顿后插（等距）
-InterpolationResult stirlingInterpolation(x, y, xVal);    // 斯梯林插值
-InterpolationResult besselInterpolation(x, y, xVal);      // 贝塞尔插值
 InterpolationResult lagrangeInterpolation(x, y, xVal);    // 拉格朗日插值
+
+// 反插值（两种方法）
+InterpolationResult inverseInterpolationBySwap(x, y, yVal);     // 交换x/y的插值
+InterpolationResult inverseInterpolationByIteration(x, y, yVal, x0, maxIter, tol); // 迭代反插值
+
+// 埃尔米特插值（重节点差商）
+InterpolationResult hermiteInterpolation(x, y, dy, xVal);  // 含导数的插值
 ```
 
 #### 3.5 矩阵工具
@@ -381,23 +388,23 @@ double optimalOmegaSOR(A);
    │                       │                      │                      └─ 返回结果
    │                       │                      ├─ 格式化输出            │
    │                       │ ←─────────────────── └─ 调用 output API      │
-   │                       ├─ 渲染输出标签页      │                        │
+   │                       ├─ 渲染输出标签页       │                       │
    │                       │                      │                       │
-   └─ 查看结果 ────────→ (标签页切换)          │                           │
+   └─ 查看结果 ────────→ (标签页切换)              │                        │
 ```
 
 ### 预设系统数据流
 
 ```
-用户按 ← 或 →          UI 层                Manager 层
+ 用户按 ← 或 →          UI 层                Manager 层
    │                    │                      │
-   └─ onPresetChange ──→                     │
+   └─ onPresetChange ──→                        │
                          │                      ├─ 判断实验类型
                          │                      ├─ cyclePresetFor (函数预设)
                          │                      ├─ cycleMatrixPresetFor (矩阵预设)
                          │                      └─ cycleValueTablePresetFor (函数值表)
                          │                      │
-                         │ ←──────────────────── ├─ 更新状态
+                         │ ←────────────────────├─ 更新状态
                          │                      └─ fillDescriptionFor
                          ├─ 更新说明区文本      │
 ```
@@ -628,5 +635,23 @@ void UI::buildExperimentTree() {
 本项目由legendundery开发，用于简单演示和算法验证。
 
 **联系方式：** 见 README.md
+
+## 更新日志
+
+### 2025-11-26
+
+- ✅ 添加文本标签页滚动支持（差商表、多项式可上下滚动）
+- ✅ 优化差商表显示格式（去除Unicode边框，统一表头为k=0格式）
+- ✅ 完成埃尔米特插值实现（重节点广义差商法）
+- ✅ 完成反插值两种方法（交换插值、迭代反插值）
+- ✅ 修复多项式Unicode乱码问题（全面ASCII化）
+- ✅ 优化输出格式（差商表表格化、多项式分项换行）
+
+### 已完成功能
+
+- ✅ 第二章 方程求根（8个方法）
+- ✅ 第三章 线性方程组直接法（6个方法）
+- ✅ 第四章 线性方程组迭代法（3个方法）
+- ✅ 第五章 插值法（6个方法）
 
 **最后更新：** 2025年11月26日

@@ -100,7 +100,6 @@ namespace calc
     // 全主元素法：每次选取全部剩余元素中绝对值最大的交换到主元位置
     GaussResult fullPivoting(const Matrix &A, const std::vector<double> &b);
 
-
     // ==================== 矩阵工具函数 ====================
 
     // 矩阵范数
@@ -132,7 +131,6 @@ namespace calc
     // 计算SOR方法的最优松弛因子（针对对角占优矩阵）
     double optimalOmegaSOR(const Matrix &A);
 
-
     // ==================== 迭代法求解线性方程组 ====================
 
     // 迭代法结果
@@ -160,7 +158,6 @@ namespace calc
     IterativeResult sorIteration(const Matrix &A, const std::vector<double> &b,
                                  const std::vector<double> &x0, int maxIter, double tol, double omega);
 
-                                 
     // ==================== 插值法基础工具 ====================
 
     // 差分表（Forward Difference Table）
@@ -254,6 +251,40 @@ namespace calc
     InterpolationResult lagrangeInterpolation(const std::vector<double> &x,
                                               const std::vector<double> &y,
                                               double xVal);
+
+    // ==================== 简单反插值 ====================
+
+    // 反函数插值（方法1）
+    // 输入：节点 x, 函数值 y, 目标函数值 yVal
+    // 输出：反插值结果，即求 x 使得 f(x) = yVal
+    // 方法：交换 x 和 y 的角色，使用拉格朗日插值 L_n(yVal)
+    // 适用条件：函数 f 在节点区间单调
+    InterpolationResult inverseInterpolationBySwap(const std::vector<double> &x,
+                                                   const std::vector<double> &y,
+                                                   double yVal);
+
+    // 正函数迭代反插值（方法2）
+    // 输入：节点 x, 函数值 y, 目标函数值 C, 初值 x0, 最大迭代次数, 容差
+    // 输出：反插值结果，即求 x 使得 f(x) = C
+    // 方法：使用牛顿插值公式构建迭代
+    //   x^(k+1) = x_0 + (C - f(x_0)) / f[x_0, x_1] + ...
+    // 自动选择牛顿差商（不等距）或牛顿差分（等距）方法
+    InterpolationResult inverseInterpolationByIteration(const std::vector<double> &x,
+                                                        const std::vector<double> &y,
+                                                        double C,
+                                                        double x0,
+                                                        int maxIter = 50,
+                                                        double tol = 1e-6);
+
+    // 埃尔米特插值（牛顿型）
+    // 输入：节点 x, 函数值 y, 导数值 dy (与 y 同长度), 插值点 xVal
+    // 输出：插值结果，包含 H(xVal) 及重节点差商表
+    // 原理：将每个节点 x_i 重复 m_i 次，其中 m_i 是该点已知导数的最高阶数+1
+    //      使用广义差商公式：f[x_i,...,x_i] = f^(m_i)(x_i) / m_i!
+    InterpolationResult hermiteInterpolation(const std::vector<double> &x,
+                                             const std::vector<double> &y,
+                                             const std::vector<double> &dy,
+                                             double xVal);
 
     // 等距节点检查与插值方法选择
     // 输入：节点 x, 插值点 xVal

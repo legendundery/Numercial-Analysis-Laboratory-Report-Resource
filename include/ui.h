@@ -74,11 +74,14 @@ public:
     void setSelected(int idx);
     int tableScroll() const { return tableScroll_; }
     void setTableScroll(int val) { tableScroll_ = val; }
+    int textScroll() const { return textScroll_; }
+    void setTextScroll(int val) { textScroll_ = val; }
 
 private:
     std::vector<Tab> tabs_;
     int selected_ = 0;
     int tableScroll_ = 0; // 表格滚动偏移（首行索引）
+    int textScroll_ = 0;  // 文本滚动偏移（首行索引）
 };
 
 class UI

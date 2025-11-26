@@ -78,10 +78,12 @@ private:
     void computeGaussSeidel(const std::string &name);
     void computeSOR(const std::string &name);
     void computeDividedDifference(const std::string &name);
-    void computeNewtonDividedDiff(const std::string &name); 
-    void computeNewtonEqualDiff(const std::string &name);   
-    void computeLagrange(const std::string &name); 
-    
+    void computeNewtonDividedDiff(const std::string &name);
+    void computeNewtonEqualDiff(const std::string &name);
+    void computeLagrange(const std::string &name);
+    void computeInverseInterpolation(const std::string &name); // 简单反插值
+    void computeHermite(const std::string &name);              // 埃尔米特插值
+
     // 预设相关
     void ensurePresets();
     void cyclePresetFor(const std::string &name, int delta);
