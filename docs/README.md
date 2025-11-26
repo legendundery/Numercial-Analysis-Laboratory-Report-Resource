@@ -11,7 +11,6 @@
 |------|------|
 | **[架构文档](ARCHITECTURE.md)** | 三层架构设计、模块详解、数据流分析 |
 | **[API文档](API_DOC.md)** | UI层API、Manager层接口、开发指南 |
-| **[快速参考](QUICK_REFERENCE.md)** | 常用操作、键盘快捷键、FAQ |
 
 ## 📁 项目结构
 
